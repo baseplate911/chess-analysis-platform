@@ -11,7 +11,7 @@ from database.schemas import Token, UserCreate, UserLogin, UserResponse
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=dict, status_code=status.HTTP_201_CREATED)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
     """Register a new user and return a JWT access token."""
     if db.query(User).filter(User.email == user_data.email).first():
@@ -33,10 +33,18 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     token = create_access_token({"sub": str(user.id)})
-    return Token(access_token=token)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+        }
+    }
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=dict)
 def login(credentials: UserLogin, db: Session = Depends(get_db)):
     """Authenticate a user and return a JWT access token."""
     user = db.query(User).filter(User.email == credentials.email).first()
@@ -46,7 +54,15 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
             detail="Invalid email or password",
         )
     token = create_access_token({"sub": str(user.id)})
-    return Token(access_token=token)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+        }
+    }
 
 
 @router.get("/me", response_model=UserResponse)
