@@ -1,4 +1,5 @@
-"""Chess analysis service using python-chess with an optional Stockfish backend."""
+"""Chess analysis service using python-chess with an optional Stockfish backend.
+"""
 
 import io
 import math
@@ -35,14 +36,7 @@ class ChessService:
     # ------------------------------------------------------------------
 
     def analyze_game(self, pgn_string: str) -> Dict:
-        """Analyse every move in a PGN game and return classifications and win probabilities.
-
-        Args:
-            pgn_string: A complete PGN game string.
-
-        Returns:
-            A dict with keys: pgn, result, moves, win_probabilities.
-        """
+        """Analyse every move in a PGN game and return classifications and win probabilities."""
         pgn_io = io.StringIO(pgn_string)
         game = chess.pgn.read_game(pgn_io)
         if game is None:
@@ -64,16 +58,15 @@ class ChessService:
             move_number += 1
 
             eval_after = self._evaluate_position(board)
-            # Convert to current-player perspective (positive = good for the player who just moved)
             perspective_before = eval_before if is_white else -eval_before
             perspective_after = eval_after if is_white else -eval_after
-
-            # eval_diff > 0 means position worsened (for reporting and classification)
             eval_diff = perspective_before - perspective_after
 
             classification = self.classify_move(perspective_before, perspective_after)
             features = self.extract_features(board)
-            probs = self.ml_service.predict_win_probability(features)
+
+            # Use eval_after (white's perspective) to compute win probability
+            probs = self.ml_service.predict_win_probability([eval_after] + features[1:])
 
             moves_analysis.append(
                 {
@@ -87,9 +80,10 @@ class ChessService:
             )
             win_probabilities.append(
                 {
-                    "white": round(probs[0], 3),
-                    "draw": round(probs[1], 3),
-                    "black": round(probs[2], 3),
+                    "move": move_number,
+                    "white": round(probs[0] * 100, 1),
+                    "draw": round(probs[1] * 100, 1),
+                    "black": round(probs[2] * 100, 1),
                 }
             )
 
@@ -104,18 +98,11 @@ class ChessService:
         }
 
     def analyze_position(self, fen: str) -> Dict:
-        """Evaluate a single board position given in FEN notation.
-
-        Args:
-            fen: A valid FEN string.
-
-        Returns:
-            A dict with keys: evaluation, best_move, win_probabilities.
-        """
+        """Evaluate a single board position given in FEN notation."""
         board = chess.Board(fen)
         evaluation = self._evaluate_position(board)
         features = self.extract_features(board)
-        probs = self.ml_service.predict_win_probability(features)
+        probs = self.ml_service.predict_win_probability([evaluation] + features[1:])
 
         best_move = self._get_best_move(board)
 
@@ -123,17 +110,14 @@ class ChessService:
             "evaluation": round(evaluation, 3),
             "best_move": best_move,
             "win_probabilities": {
-                "white": round(probs[0], 3),
-                "draw": round(probs[1], 3),
-                "black": round(probs[2], 3),
+                "white": round(probs[0] * 100, 1),
+                "draw": round(probs[1] * 100, 1),
+                "black": round(probs[2] * 100, 1),
             },
         }
 
     def classify_move(self, eval_before: float, eval_after: float) -> str:
-        """Classify a move based on the evaluation change from the current player's perspective.
-
-        eval_diff = eval_before - eval_after (positive means the position worsened).
-        """
+        """Classify a move based on the evaluation change from the current player's perspective."""
         eval_diff = eval_before - eval_after
         if eval_diff > 2.0:
             return "blunder"
@@ -146,10 +130,7 @@ class ChessService:
         return "best"
 
     def extract_features(self, board: chess.Board) -> List[float]:
-        """Extract a numeric feature vector from a chess board for ML input.
-
-        Features: material balance, piece counts, mobility, pawn structure, king safety.
-        """
+        """Extract a numeric feature vector from a chess board for ML input."""
         features: List[float] = []
 
         piece_values = {
@@ -175,7 +156,7 @@ class ChessService:
             for pt in [chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN]:
                 features.append(float(len(board.pieces(pt, color))))
 
-        # Mobility (legal moves available from current side's perspective)
+        # Mobility
         features.append(float(board.legal_moves.count()))
 
         # Pawn structure: doubled pawns per side
@@ -184,7 +165,7 @@ class ChessService:
             doubled = sum(pawn_files.count(f) - 1 for f in set(pawn_files))
             features.append(float(doubled))
 
-        # King safety: number of attackers near king
+        # King safety
         for color in [chess.WHITE, chess.BLACK]:
             king_sq = board.king(color)
             if king_sq is not None:
@@ -200,7 +181,7 @@ class ChessService:
     # ------------------------------------------------------------------
 
     def _evaluate_position(self, board: chess.Board) -> float:
-        """Return a centipawn evaluation of the position (positive = White advantage)."""
+        """Return evaluation of the position (positive = White advantage)."""
         if self.engine:
             try:
                 import chess.engine
@@ -217,7 +198,15 @@ class ChessService:
         return self._heuristic_evaluation(board)
 
     def _heuristic_evaluation(self, board: chess.Board) -> float:
-        """Simple material-based evaluation when Stockfish is unavailable."""
+        """
+        Enhanced evaluation combining:
+        - Material balance
+        - Center control bonus
+        - Piece mobility bonus
+        - Pawn advancement bonus
+        - Castling bonus
+        - Check/threat penalty
+        """
         piece_values = {
             chess.PAWN: 1.0,
             chess.KNIGHT: 3.0,
@@ -226,10 +215,48 @@ class ChessService:
             chess.QUEEN: 9.0,
             chess.KING: 0.0,
         }
+
+        # 1. Material balance
         score = 0.0
         for piece_type, value in piece_values.items():
             score += value * len(board.pieces(piece_type, chess.WHITE))
             score -= value * len(board.pieces(piece_type, chess.BLACK))
+
+        # 2. Center control bonus (e4,d4,e5,d5 squares)
+        center_squares = [chess.E4, chess.D4, chess.E5, chess.D5]
+        for sq in center_squares:
+            white_attackers = len(board.attackers(chess.WHITE, sq))
+            black_attackers = len(board.attackers(chess.BLACK, sq))
+            score += 0.1 * (white_attackers - black_attackers)
+
+        # 3. Mobility bonus
+        current_turn = board.turn
+        board.turn = chess.WHITE
+        white_moves = board.legal_moves.count()
+        board.turn = chess.BLACK
+        black_moves = board.legal_moves.count()
+        board.turn = current_turn
+        score += 0.05 * (white_moves - black_moves)
+
+        # 4. Pawn advancement bonus
+        for sq in board.pieces(chess.PAWN, chess.WHITE):
+            score += 0.05 * (chess.square_rank(sq) - 1)
+        for sq in board.pieces(chess.PAWN, chess.BLACK):
+            score -= 0.05 * (6 - chess.square_rank(sq))
+
+        # 5. Castling rights bonus
+        if board.has_castling_rights(chess.WHITE):
+            score += 0.2
+        if board.has_castling_rights(chess.BLACK):
+            score -= 0.2
+
+        # 6. Check penalty/bonus
+        if board.is_check():
+            if board.turn == chess.BLACK:
+                score += 0.5  # White just gave check
+            else:
+                score -= 0.5
+
         return score
 
     def _get_best_move(self, board: chess.Board) -> str:
