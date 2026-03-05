@@ -1,3 +1,4 @@
+# Build from the repo root: docker build -f backend/Dockerfile .
 FROM python:3.11-slim
 WORKDIR /app
 COPY requirements.txt .
