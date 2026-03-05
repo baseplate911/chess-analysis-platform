@@ -150,13 +150,14 @@ class FeatureExtractor:
 
     @staticmethod
     def _mobility(board: chess.Board, color: chess.Color) -> float:
-        """Count legal moves for *color* without altering the board."""
+        """Count legal moves for *color* without permanently altering the board."""
         if board.turn == color:
             return float(board.legal_moves.count())
-        # Temporarily flip the turn to count the opponent's moves
+        # Temporarily flip the turn to count the other side's moves, then restore
+        original_turn = board.turn
         board.turn = color
         count = float(board.legal_moves.count())
-        board.turn = chess.WHITE if color == chess.BLACK else chess.BLACK
+        board.turn = original_turn
         return count
 
     @staticmethod

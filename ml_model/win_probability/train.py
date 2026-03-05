@@ -76,7 +76,7 @@ def train(n_samples: int = 5000) -> MLPClassifier:
     y_pred = clf.predict(X_test)
     acc = accuracy_score(y_test, y_pred)
     logger.info("Test accuracy: %.4f", acc)
-    print(f"Training accuracy: {acc:.4f}")
+    print(f"Test accuracy: {acc:.4f}")
     return clf
 
 

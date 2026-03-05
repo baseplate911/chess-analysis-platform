@@ -91,7 +91,7 @@ def train(n_samples: int = 8000) -> RandomForestClassifier:
     y_pred = clf.predict(X_test)
     acc = accuracy_score(y_test, y_pred)
     logger.info("Test accuracy: %.4f", acc)
-    print(f"Training accuracy: {acc:.4f}")
+    print(f"Test accuracy: {acc:.4f}")
     print(classification_report(y_test, y_pred, target_names=sorted(set(y_test))))
     return clf
 
