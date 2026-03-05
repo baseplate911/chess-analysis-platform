@@ -23,6 +23,7 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
+    games = relationship("Game", back_populates="owner")
     profile = relationship("PlayerProfile", back_populates="owner", uselist=False)
 
 

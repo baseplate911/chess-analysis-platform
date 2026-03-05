@@ -1,9 +1,17 @@
 """Entry point for the Chess Analysis Platform FastAPI application."""
 
+import os
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# Ensure the repo root is on sys.path so that `database` package is importable
+# when the server is launched from inside the backend/ directory.
+_repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 
 from database.database import Base, engine
 from routers import analysis_router, auth_router, player_router
