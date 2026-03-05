@@ -1,0 +1,43 @@
+version: "3.9"
+
+# Chess Analysis Platform — Docker Compose
+# Runs the full stack: React frontend + FastAPI backend
+# Usage: docker-compose up --build
+
+services:
+  # FastAPI Python backend
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - STOCKFISH_PATH=${STOCKFISH_PATH:-/usr/games/stockfish}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./chess_analysis.db}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+    volumes:
+      # Persist the SQLite database file across container restarts
+      - chess_db:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # React.js frontend (Vite build served by Nginx)
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_URL=http://localhost:8000
+
+volumes:
+  chess_db:
+    driver: local
