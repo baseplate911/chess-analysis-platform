@@ -40,7 +40,7 @@ export default function AnalyzePage() {
     ? STARTING_FEN
     : positions[currentMoveIndex + 1] || STARTING_FEN;
 
-  const currentEval = analysisData?.moves?.[currentMoveIndex]?.eval ?? 0;
+  const currentEval = analysisData?.moves?.[currentMoveIndex]?.eval_after ?? 0;
   const currentBestMove = analysisData?.moves?.[currentMoveIndex]?.best_move;
 
   const handleFileUpload = (e) => {
@@ -96,7 +96,7 @@ export default function AnalyzePage() {
     if (!analysisData) return;
     setSaving(true);
     try {
-      await saveGame({ pgn, analysis: analysisData });
+      await saveGame({ pgn, result: analysisData.result, analysis_json: JSON.stringify(analysisData) });
       setSavedSuccess(true);
     } catch {
       setError('Failed to save game.');

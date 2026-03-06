@@ -54,6 +54,8 @@ class ChessService:
             move_san = board.san(move)
             is_white = board.turn == chess.WHITE
 
+            best_move = self._get_best_move(board)
+
             board.push(move)
             move_number += 1
 
@@ -76,6 +78,7 @@ class ChessService:
                     "eval_before": round(perspective_before, 3),
                     "eval_after": round(perspective_after, 3),
                     "eval_diff": round(eval_diff, 3),
+                    "best_move": best_move,
                 }
             )
             win_probabilities.append(

@@ -24,9 +24,9 @@ function MoveChip({ moveData, index, isSelected, onClick }) {
     >
       <span>{style.emoji}</span>
       <span className="font-mono">{moveData.move}</span>
-      {moveData.eval !== undefined && (
+      {moveData.eval_after !== undefined && (
         <span className="ml-auto opacity-60 text-xs">
-          {moveData.eval > 0 ? '+' : ''}{typeof moveData.eval === 'number' ? moveData.eval.toFixed(1) : moveData.eval}
+          {moveData.eval_after > 0 ? '+' : ''}{typeof moveData.eval_after === 'number' ? moveData.eval_after.toFixed(1) : moveData.eval_after}
         </span>
       )}
     </button>

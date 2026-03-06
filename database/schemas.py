@@ -52,6 +52,7 @@ class GameCreate(BaseModel):
 
     pgn: str
     result: Optional[str] = None
+    analysis_json: Optional[str] = None
 
 
 class GameResponse(BaseModel):
@@ -76,6 +77,7 @@ class MoveAnalysis(BaseModel):
     eval_before: float
     eval_after: float
     eval_diff: float
+    best_move: Optional[str] = None
 
 
 class GameAnalysis(BaseModel):

@@ -20,10 +20,10 @@ export default function WinProbabilityChart({ winProbabilities = [] }) {
   }
 
   const data = winProbabilities.map((d) => ({
-    move: d.move_number,
-    White: parseFloat((d.white_win * 100).toFixed(1)),
-    Draw: parseFloat((d.draw * 100).toFixed(1)),
-    Black: parseFloat((d.black_win * 100).toFixed(1)),
+    move: d.move,
+    White: parseFloat(d.white),
+    Draw: parseFloat(d.draw),
+    Black: parseFloat(d.black),
   }));
 
   return (

@@ -62,6 +62,13 @@ chess-analysis-platform/
 
 ## 🚀 Quick Start
 
+### Prerequisites
+
+- **Docker + Docker Compose** (for Option 1)
+- **Python 3.11+** and **Node.js 20+** (for Option 2)
+
+---
+
 ### Option 1 — Docker (recommended)
 
 ```bash
@@ -69,46 +76,73 @@ chess-analysis-platform/
 git clone https://github.com/baseplate911/chess-analysis-platform.git
 cd chess-analysis-platform
 
-# 2. Copy environment file
+# 2. Copy environment file and set a strong SECRET_KEY
 cp .env.example .env
-# Edit .env and set a strong SECRET_KEY
+# Open .env in your editor and change SECRET_KEY to a long random string
 
-# 3. Start everything
+# 3. Build and start everything (frontend + backend)
 docker-compose up --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open **[http://localhost:3000](http://localhost:3000)** in your browser.
+
+> To stop the app: `docker-compose down`  
+> To stop and remove all data: `docker-compose down -v`
 
 ---
 
-### Option 2 — Manual Setup
+### Option 2 — Manual Setup (two terminals)
 
-#### Backend
+#### Terminal 1 — Backend (FastAPI)
 
 ```bash
-# Create and activate a virtual environment
+# From the repo root
 python -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
 
 # Install Python dependencies
 pip install -r requirements.txt
 
-# Copy and edit environment variables
+# Copy environment variables
 cp .env.example .env
 
-# Start the FastAPI server (from repo root)
+# Start the FastAPI server
 cd backend
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-#### Frontend
+The backend API will be available at **[http://localhost:8000](http://localhost:8000)**  
+Interactive API docs: **[http://localhost:8000/docs](http://localhost:8000/docs)**
+
+#### Terminal 2 — Frontend (React + Vite)
 
 ```bash
+# From the repo root (in a new terminal)
 cd frontend
 npm install
-npm run dev          # Development server on http://localhost:5173
-# or
-npm run build && npm run preview   # Production build
+npm run dev
+```
+
+The frontend will be available at **[http://localhost:5173](http://localhost:5173)**
+
+> The Vite dev server proxies `/api` requests to `http://localhost:8000` automatically via Nginx in Docker, or you can configure Vite's `server.proxy` for local dev (see `vite.config.js`).
+
+---
+
+### Option 3 — Production Build (no Docker)
+
+```bash
+# Build the frontend
+cd frontend
+npm install
+npm run build   # output in frontend/dist/
+
+# Serve the dist folder with any static server, e.g. nginx or:
+npx serve dist
+
+# Run the backend
+cd ../backend
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 ---

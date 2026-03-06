@@ -80,6 +80,7 @@ def save_game(
         user_id=current_user.id,
         pgn=game_data.pgn,
         result=game_data.result,
+        analysis_json=game_data.analysis_json,
     )
     db.add(game)
     db.commit()
