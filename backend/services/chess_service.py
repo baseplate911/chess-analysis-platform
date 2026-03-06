@@ -68,6 +68,9 @@ class ChessService:
             # Use eval_after (white's perspective) to compute win probability
             probs = self.ml_service.predict_win_probability([eval_after] + features[1:])
 
+            # Best move suggestion from the current position
+            best_move = self._get_best_move(board)
+
             moves_analysis.append(
                 {
                     "move_number": move_number,
@@ -76,6 +79,9 @@ class ChessService:
                     "eval_before": round(perspective_before, 3),
                     "eval_after": round(perspective_after, 3),
                     "eval_diff": round(eval_diff, 3),
+                    # Convenience aliases used by the frontend
+                    "eval": round(perspective_after, 3),
+                    "best_move": best_move,
                 }
             )
             win_probabilities.append(
@@ -90,11 +96,35 @@ class ChessService:
             eval_before = eval_after
 
         result = game.headers.get("Result", "*")
+
+        # Build a summary of move-quality counts and overall accuracy
+        quality_counts: Dict[str, int] = {
+            "blunders": 0, "mistakes": 0, "inaccuracies": 0, "good": 0, "best": 0
+        }
+        label_map = {
+            "blunder": "blunders",
+            "mistake": "mistakes",
+            "inaccuracy": "inaccuracies",
+            "good": "good",
+            "best": "best",
+        }
+        for m in moves_analysis:
+            key = label_map.get(m["classification"])
+            if key:
+                quality_counts[key] += 1
+
+        total = len(moves_analysis)
+        good_moves = quality_counts["good"] + quality_counts["best"]
+        # Accuracy = proportion of moves classified "good" or "best" (platform-specific metric)
+        accuracy = round((good_moves / total * 100), 1) if total else 0.0
+        summary = {**quality_counts, "total_moves": total, "accuracy": accuracy}
+
         return {
             "pgn": pgn_string,
             "result": result,
             "moves": moves_analysis,
             "win_probabilities": win_probabilities,
+            "summary": summary,
         }
 
     def analyze_position(self, fen: str) -> Dict:

@@ -1,5 +1,6 @@
 """Pydantic v2 schemas for request/response validation in the Chess Analysis Platform."""
 
+import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -52,6 +53,7 @@ class GameCreate(BaseModel):
 
     pgn: str
     result: Optional[str] = None
+    analysis_json: Optional[str] = None
 
 
 class GameResponse(BaseModel):
@@ -66,6 +68,30 @@ class GameResponse(BaseModel):
     analysis_json: Optional[str]
     created_at: datetime
 
+    # Computed stats derived from analysis_json for dashboard / history display
+    move_count: Optional[int] = None
+    accuracy: Optional[float] = None
+    blunders: Optional[int] = None
+
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        """Populate computed stats from analysis_json when constructing from an ORM model."""
+        instance = super().model_validate(obj, **kwargs)
+        if instance.analysis_json:
+            try:
+                data = json.loads(instance.analysis_json)
+                moves = data.get("moves", [])
+                instance.move_count = len(moves)
+                instance.blunders = sum(
+                    1 for m in moves if m.get("classification") == "blunder"
+                )
+                summary = data.get("summary", {})
+                if summary.get("accuracy") is not None:
+                    instance.accuracy = float(summary["accuracy"])
+            except Exception:
+                pass
+        return instance
+
 
 class MoveAnalysis(BaseModel):
     """Schema for an individual move analysis result."""
@@ -76,6 +102,8 @@ class MoveAnalysis(BaseModel):
     eval_before: float
     eval_after: float
     eval_diff: float
+    eval: Optional[float] = None
+    best_move: Optional[str] = None
 
 
 class GameAnalysis(BaseModel):
@@ -85,6 +113,7 @@ class GameAnalysis(BaseModel):
     result: str
     moves: List[MoveAnalysis]
     win_probabilities: List[Dict[str, float]]
+    summary: Optional[Dict[str, Any]] = None
 
 
 # ---------------------------------------------------------------------------

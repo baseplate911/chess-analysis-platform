@@ -37,10 +37,15 @@ export const analyzePosition = (fen) => api.post('/analyze/position', { fen });
 
 export const getHistory = () => api.get('/analyze/history');
 
-export const saveGame = (gameData) => api.post('/analyze/save', gameData);
+export const saveGame = (gameData) =>
+  api.post('/analyze/save', {
+    pgn: gameData.pgn,
+    result: gameData.analysis?.result ?? null,
+    analysis_json: gameData.analysis ? JSON.stringify(gameData.analysis) : null,
+  });
 
-export const getProfile = () => api.get('/users/profile');
+export const getProfile = () => api.get('/player/profile');
 
-export const classifyPlayer = () => api.post('/users/classify');
+export const classifyPlayer = () => api.post('/player/classify');
 
 export default api;
