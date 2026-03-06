@@ -41,7 +41,7 @@ chess-analysis-platform/
 │   └── Dockerfile
 │
 ├── database/                  # SQLAlchemy + Pydantic
-│   ├── database.py            # SQLite engine + session
+│   ├── database.py            # DB engine + session (reads DATABASE_URL env var)
 │   ├── models.py              # User, Game, PlayerProfile ORM models
 │   └── schemas.py             # Pydantic v2 schemas
 │
@@ -171,36 +171,40 @@ When the backend is running, interactive API docs are at:
 
 ## 🤖 ML Models
 
-Three scikit-learn models are included as pre-trained stubs. They return realistic predictions immediately and can be retrained on real Lichess data.
+Three scikit-learn models ship with pre-trained stubs (trained on synthetic data). They return realistic predictions immediately and can be retrained on real Lichess data. When model files are present in their respective directories they are loaded automatically by the backend; otherwise the service falls back to built-in heuristics so the platform remains fully functional without any ML setup.
 
-### Model 1: Win Probability Predictor
+### Model 1: Win Probability Predictor (`ml_model/win_probability/`)
 - **Architecture:** MLPClassifier (neural network)
 - **Input:** 16 board features (material, mobility, king safety, …)
 - **Output:** `{white_win, draw, black_win}` probabilities
+- **Stub file:** `ml_model/win_probability/chess_win_model.pkl`
 
-### Model 2: Blunder Detector
+### Model 2: Blunder Detector (`ml_model/blunder_detector/`)
 - **Architecture:** RandomForestClassifier
 - **Input:** Board features + evaluation difference
 - **Output:** `blunder / mistake / inaccuracy / good / best`
+- **Stub file:** `ml_model/blunder_detector/blunder_model.pkl`
 
-### Model 3: Player Behaviour Classifier
+### Model 3: Player Behaviour Classifier (`ml_model/player_behaviour/`)
 - **Architecture:** RandomForestClassifier
 - **Input:** Aggregate game statistics
 - **Output:** `Aggressive / Defensive / Tactical / Positional`
+- **Stub file:** `ml_model/player_behaviour/player_behaviour_model.pkl`
 
 See [`ml_model/README.md`](ml_model/README.md) for full training instructions on real Lichess data.
 
-### Training on Real Data
+### (Re-)Training Models
+
+Run each training script from the repo root to regenerate the `.pkl` files:
 
 ```bash
-# Download Lichess open database (PGN files)
-# https://database.lichess.org/
-
-# Train each model
+# Train each model (uses synthetic data by default)
 python ml_model/win_probability/train.py
 python ml_model/blunder_detector/train.py
 python ml_model/player_behaviour/train.py
 ```
+
+To train on real data, see [Training on Real Lichess Data](ml_model/README.md) in the ML model README.
 
 ---
 

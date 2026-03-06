@@ -19,7 +19,9 @@ class MLService:
     so that the application remains fully functional without pre-trained artefacts.
     """
 
-    MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
+    # Root of the ml_model package (repo root is two levels above this file)
+    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    MODEL_DIR = os.path.join(_REPO_ROOT, "ml_model")
 
     def __init__(self):
         self.win_prob_model = None
@@ -32,22 +34,22 @@ class MLService:
     # ------------------------------------------------------------------
 
     def load_models(self) -> None:
-        """Try to load serialised sklearn models from the models/ directory.
+        """Try to load serialised sklearn models from the ml_model/ directories.
 
         Falls back to stub implementations when files are not found.
         """
         if not _NUMPY_AVAILABLE:
             return
 
-        for attr, filename in [
-            ("win_prob_model", "win_prob_model.pkl"),
-            ("move_quality_model", "move_quality_model.pkl"),
-            ("player_style_model", "player_style_model.pkl"),
-        ]:
-            path = os.path.join(self.MODEL_DIR, filename)
-            if os.path.exists(path):
+        model_paths = [
+            ("win_prob_model", os.path.join(self.MODEL_DIR, "win_probability", "chess_win_model.pkl")),
+            ("move_quality_model", os.path.join(self.MODEL_DIR, "blunder_detector", "blunder_model.pkl")),
+            ("player_style_model", os.path.join(self.MODEL_DIR, "player_behaviour", "player_behaviour_model.pkl")),
+        ]
+        for attr, model_path in model_paths:
+            if os.path.exists(model_path):
                 try:
-                    setattr(self, attr, joblib.load(path))
+                    setattr(self, attr, joblib.load(model_path))
                 except Exception:
                     pass  # Keep attribute as None; will use heuristic fallback
 
