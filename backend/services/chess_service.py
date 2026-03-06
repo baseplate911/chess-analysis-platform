@@ -1,4 +1,20 @@
 """Chess analysis service using python-chess with an optional Stockfish backend.
+
+Move classification thresholds (in pawns, from the moving side's perspective):
+
+    +-----------------+--------------------------------------+
+    | Classification  | Condition (eval_diff = before-after) |
+    +-----------------+--------------------------------------+
+    | blunder         | eval_diff > 2.0                      |
+    | mistake         | eval_diff > 1.0                      |
+    | inaccuracy      | eval_diff > 0.5                      |
+    | good            | eval_diff > -0.5                     |
+    | best            | eval_diff <= -0.5                    |
+    +-----------------+--------------------------------------+
+
+A positive ``eval_diff`` means the position worsened for the moving
+player; a negative value means the position improved (the move was
+better than the engine's expectation).
 """
 
 import io
@@ -9,6 +25,18 @@ import chess
 import chess.pgn
 
 from services.ml_service import MLService
+from services.move_classification import (
+    BLUNDER_THRESHOLD,
+    CLASSIFICATION_BEST,
+    CLASSIFICATION_BLUNDER,
+    CLASSIFICATION_GOOD,
+    CLASSIFICATION_INACCURACY,
+    CLASSIFICATION_MISTAKE,
+    GOOD_THRESHOLD,
+    INACCURACY_THRESHOLD,
+    MISTAKE_THRESHOLD,
+    classify_move_by_eval_diff,
+)
 
 
 class ChessService:
@@ -36,7 +64,15 @@ class ChessService:
     # ------------------------------------------------------------------
 
     def analyze_game(self, pgn_string: str) -> Dict:
-        """Analyse every move in a PGN game and return classifications and win probabilities."""
+        """Analyse every move in a PGN game.
+
+        Returns a dict containing:
+        - ``pgn``: the original PGN text
+        - ``result``: the game result header (e.g. ``"1-0"``)
+        - ``moves``: per-move analysis list (classification, eval, best_move, annotations)
+        - ``win_probabilities``: per-move win/draw/loss percentages
+        - ``summary``: aggregate statistics (accuracy, blunder/mistake/inaccuracy counts, …)
+        """
         pgn_io = io.StringIO(pgn_string)
         game = chess.pgn.read_game(pgn_io)
         if game is None:
@@ -54,15 +90,25 @@ class ChessService:
             move_san = board.san(move)
             is_white = board.turn == chess.WHITE
 
+            # Collect move annotations *before* pushing
+            is_capture = board.is_capture(move)
+            is_castle = board.is_castling(move)
+
+            # Determine best move *before* the current move is played
+            best_move = self._get_best_move(board)
+
             board.push(move)
             move_number += 1
+
+            # Collect annotations that require the *new* position
+            is_check = board.is_check()
 
             eval_after = self._evaluate_position(board)
             perspective_before = eval_before if is_white else -eval_before
             perspective_after = eval_after if is_white else -eval_after
             eval_diff = perspective_before - perspective_after
 
-            classification = self.classify_move(perspective_before, perspective_after)
+            classification = classify_move_by_eval_diff(eval_diff)
             features = self.extract_features(board)
 
             # Use eval_after (white's perspective) to compute win probability
@@ -76,6 +122,10 @@ class ChessService:
                     "eval_before": round(perspective_before, 3),
                     "eval_after": round(perspective_after, 3),
                     "eval_diff": round(eval_diff, 3),
+                    "best_move": best_move,
+                    "is_capture": is_capture,
+                    "is_check": is_check,
+                    "is_castle": is_castle,
                 }
             )
             win_probabilities.append(
@@ -90,11 +140,14 @@ class ChessService:
             eval_before = eval_after
 
         result = game.headers.get("Result", "*")
+        summary = self._build_game_summary(moves_analysis, result)
+
         return {
             "pgn": pgn_string,
             "result": result,
             "moves": moves_analysis,
             "win_probabilities": win_probabilities,
+            "summary": summary,
         }
 
     def analyze_position(self, fen: str) -> Dict:
@@ -116,18 +169,13 @@ class ChessService:
             },
         }
 
-    def classify_move(self, eval_before: float, eval_after: float) -> str:
-        """Classify a move based on the evaluation change from the current player's perspective."""
-        eval_diff = eval_before - eval_after
-        if eval_diff > 2.0:
-            return "blunder"
-        if eval_diff > 1.0:
-            return "mistake"
-        if eval_diff > 0.5:
-            return "inaccuracy"
-        if eval_diff > -0.5:
-            return "good"
-        return "best"
+    @staticmethod
+    def classify_move(eval_before: float, eval_after: float) -> str:
+        """Classify a move based on the evaluation change from the current player's perspective.
+
+        This is a convenience wrapper around :func:`classify_move_by_eval_diff`.
+        """
+        return classify_move_by_eval_diff(eval_before - eval_after)
 
     def extract_features(self, board: chess.Board) -> List[float]:
         """Extract a numeric feature vector from a chess board for ML input."""
@@ -273,6 +321,53 @@ class ChessService:
         for move in board.legal_moves:
             return move.uci()
         return ""
+
+    @staticmethod
+    def _build_game_summary(moves_analysis: List[Dict], result: str) -> Dict:
+        """Compute aggregate statistics for the analysed game.
+
+        Returns a dict with keys:
+        - ``total_moves``: total number of half-moves
+        - ``result``: the game result string (e.g. ``"1-0"``)
+        - ``white_blunders``, ``white_mistakes``, ``white_inaccuracies``
+        - ``black_blunders``, ``black_mistakes``, ``black_inaccuracies``
+        - ``white_accuracy``, ``black_accuracy``: percentage of moves
+          classified as "good" or "best" for each side
+        """
+        total = len(moves_analysis)
+
+        counts: Dict[str, Dict[str, int]] = {
+            "white": {CLASSIFICATION_BLUNDER: 0, CLASSIFICATION_MISTAKE: 0, CLASSIFICATION_INACCURACY: 0,
+                      CLASSIFICATION_GOOD: 0, CLASSIFICATION_BEST: 0},
+            "black": {CLASSIFICATION_BLUNDER: 0, CLASSIFICATION_MISTAKE: 0, CLASSIFICATION_INACCURACY: 0,
+                      CLASSIFICATION_GOOD: 0, CLASSIFICATION_BEST: 0},
+        }
+
+        for i, m in enumerate(moves_analysis):
+            side = "white" if i % 2 == 0 else "black"
+            cls = m.get("classification", CLASSIFICATION_GOOD)
+            if cls in counts[side]:
+                counts[side][cls] += 1
+
+        def _accuracy(side_counts: Dict[str, int]) -> float:
+            side_total = sum(side_counts.values())
+            if side_total == 0:
+                return 0.0
+            good_or_best = side_counts[CLASSIFICATION_GOOD] + side_counts[CLASSIFICATION_BEST]
+            return round(good_or_best / side_total * 100, 1)
+
+        return {
+            "total_moves": total,
+            "result": result,
+            "white_blunders": counts["white"][CLASSIFICATION_BLUNDER],
+            "white_mistakes": counts["white"][CLASSIFICATION_MISTAKE],
+            "white_inaccuracies": counts["white"][CLASSIFICATION_INACCURACY],
+            "white_accuracy": _accuracy(counts["white"]),
+            "black_blunders": counts["black"][CLASSIFICATION_BLUNDER],
+            "black_mistakes": counts["black"][CLASSIFICATION_MISTAKE],
+            "black_inaccuracies": counts["black"][CLASSIFICATION_INACCURACY],
+            "black_accuracy": _accuracy(counts["black"]),
+        }
 
     def __del__(self):
         """Clean up the Stockfish engine process on garbage collection."""

@@ -11,6 +11,10 @@ try:
 except ImportError:
     _NUMPY_AVAILABLE = False
 
+# Import shared move-classification helper so that the heuristic fallback
+# stays in sync with the canonical thresholds.
+from services.move_classification import classify_move_by_eval_diff
+
 
 class MLService:
     """Loads trained models (if present) and provides prediction capabilities.
@@ -129,17 +133,10 @@ class MLService:
     def _threshold_move_quality(eval_diff: float) -> str:
         """Classify move quality from evaluation delta.
 
-        eval_diff is positive when the position worsened (eval_before - eval_after).
+        Delegates to the shared :func:`services.move_classification.classify_move_by_eval_diff`
+        so that thresholds stay in sync across the codebase.
         """
-        if eval_diff > 2.0:
-            return "blunder"
-        if eval_diff > 1.0:
-            return "mistake"
-        if eval_diff > 0.5:
-            return "inaccuracy"
-        if eval_diff > -0.5:
-            return "good"
-        return "best"
+        return classify_move_by_eval_diff(eval_diff)
 
     @staticmethod
     def _heuristic_player_style(player_stats: Dict) -> str:

@@ -76,6 +76,25 @@ class MoveAnalysis(BaseModel):
     eval_before: float
     eval_after: float
     eval_diff: float
+    best_move: Optional[str] = None
+    is_capture: Optional[bool] = None
+    is_check: Optional[bool] = None
+    is_castle: Optional[bool] = None
+
+
+class GameSummary(BaseModel):
+    """Aggregate statistics for an analysed game."""
+
+    total_moves: int
+    result: str
+    white_blunders: int = 0
+    white_mistakes: int = 0
+    white_inaccuracies: int = 0
+    white_accuracy: float = 0.0
+    black_blunders: int = 0
+    black_mistakes: int = 0
+    black_inaccuracies: int = 0
+    black_accuracy: float = 0.0
 
 
 class GameAnalysis(BaseModel):
@@ -85,6 +104,7 @@ class GameAnalysis(BaseModel):
     result: str
     moves: List[MoveAnalysis]
     win_probabilities: List[Dict[str, float]]
+    summary: Optional[GameSummary] = None
 
 
 # ---------------------------------------------------------------------------

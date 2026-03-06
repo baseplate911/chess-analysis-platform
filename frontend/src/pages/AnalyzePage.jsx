@@ -40,7 +40,7 @@ export default function AnalyzePage() {
     ? STARTING_FEN
     : positions[currentMoveIndex + 1] || STARTING_FEN;
 
-  const currentEval = analysisData?.moves?.[currentMoveIndex]?.eval ?? 0;
+  const currentEval = analysisData?.moves?.[currentMoveIndex]?.eval_after ?? 0;
   const currentBestMove = analysisData?.moves?.[currentMoveIndex]?.best_move;
 
   const handleFileUpload = (e) => {

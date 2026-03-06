@@ -173,6 +173,26 @@ When the backend is running, interactive API docs are at:
 
 Three scikit-learn models are included as pre-trained stubs. They return realistic predictions immediately and can be retrained on real Lichess data.
 
+### Move Classification Rules
+
+Every move is classified based on the evaluation change (in pawns) from the moving player's perspective:
+
+| Classification | Eval Drop (pawns) | Meaning |
+|---|---|---|
+| ⭐ **Best** | ≤ −0.5 | The move improved the position by more than half a pawn |
+| 🟢 **Good** | −0.5 to +0.5 | Solid move, close to engine's top choice |
+| 🟡 **Inaccuracy** | +0.5 to +1.0 | A slight slip; half a pawn to one pawn lost |
+| 🟠 **Mistake** | +1.0 to +2.0 | A clear error; one to two pawns lost |
+| 🔴 **Blunder** | > +2.0 | A serious blunder; more than two pawns lost |
+
+The classification thresholds are defined in `backend/services/move_classification.py` and are shared across the chess service and ML service to ensure consistency.
+
+### Game Summary
+
+After analysis, a summary is returned with aggregate statistics for each side:
+- **Accuracy** — percentage of moves classified as "good" or "best"
+- **Blunder / Mistake / Inaccuracy counts** — per side
+
 ### Model 1: Win Probability Predictor
 - **Architecture:** MLPClassifier (neural network)
 - **Input:** 16 board features (material, mobility, king safety, …)
@@ -254,6 +274,19 @@ DATABASE_URL=postgresql://user:password@localhost:5432/chess_db
 ## 📸 Screenshots
 
 > *(Screenshots will be added after deployment)*
+
+---
+
+## 🧪 Running Tests
+
+```bash
+# Install test dependencies
+pip install pytest
+
+# Run backend tests (from the backend/ directory)
+cd backend
+python -m pytest tests/ -v
+```
 
 ---
 
