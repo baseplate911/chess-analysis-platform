@@ -1,14 +1,27 @@
 """
 Blunder Detector – Training Script
 ====================================
-Generates synthetic training data, fits a RandomForestClassifier, evaluates
-it, and saves the model to blunder_model.pkl.
+NOTE: The production model is now XGBoost-based and was trained on 709,561
+real Lichess moves (see ml_model/blunder_detector/README.md).  The pre-trained
+files (chess_xgboost_model.json, label_map.json, features.json) are **not**
+committed to the repository and must be placed manually in this directory.
 
-Usage
------
+This script generates synthetic training data and fits a RandomForestClassifier
+for local development and testing only.  It is NOT used to produce the
+production XGBoost model.
+
+Usage (synthetic / dev only)
+-----------------------------
     python train.py
 
-To train on real Lichess data, see the project README.md.
+To retrain the real XGBoost model
+----------------------------------
+1. Run the Lichess data-collection notebook in Google Colab.
+2. Train with XGBoost on the collected dataset.
+3. Export the model with ``model.save_model("chess_xgboost_model.json")``.
+4. Export ``label_map.json`` (int → label string) and ``features.json``
+   (ordered list of 14 feature names).
+5. Copy the three files into ``ml_model/blunder_detector/``.
 """
 
 import os
