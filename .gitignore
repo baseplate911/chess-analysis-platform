@@ -20,6 +20,11 @@ ml_model/**/*.pkl
 ml_model/**/*.h5
 ml_model/**/*.joblib
 
+# XGBoost / pre-trained model artefacts (must be placed manually)
+ml_model/**/chess_xgboost_model.json
+ml_model/**/label_map.json
+ml_model/**/features.json
+
 # Node / Frontend
 frontend/node_modules/
 frontend/dist/
