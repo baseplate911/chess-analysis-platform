@@ -20,6 +20,16 @@ ml_model/**/*.pkl
 ml_model/**/*.h5
 ml_model/**/*.joblib
 
+# XGBoost model files (too large for git, place manually)
+ml_model/blunder_detector/chess_xgboost_model.json
+ml_model/blunder_detector/chess_xgboost_model.pkl
+ml_model/blunder_detector/label_map.json
+ml_model/blunder_detector/features.json
+ml_model/blunder_detector/model_summary.json
+
+# Database
+chess_analysis.db
+
 # Node / Frontend
 frontend/node_modules/
 frontend/dist/

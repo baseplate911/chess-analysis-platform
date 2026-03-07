@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: chess-analysis-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: STOCKFISH_PATH
+        value: /usr/games/stockfish
+      - key: DATABASE_URL
+        value: sqlite:///./chess_analysis.db
+      - key: CORS_ORIGINS
+        value: https://chess-analysis-frontend.onrender.com,http://localhost:5173
+
+  - type: web
+    name: chess-analysis-frontend
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: VITE_API_URL
+        value: https://chess-analysis-backend.onrender.com
