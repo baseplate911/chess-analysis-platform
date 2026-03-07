@@ -35,6 +35,13 @@ export default function Navbar() {
                   Analyze
                 </Link>
                 <Link
+                  to="/live"
+                  className="text-red-400 hover:text-red-300 px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1"
+                >
+                  <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse inline-block"></span>
+                  Live
+                </Link>
+                <Link
                   to="/history"
                   className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors"
                 >
@@ -98,6 +105,10 @@ export default function Navbar() {
             <>
               <Link to="/dashboard" className="block text-gray-300 hover:text-white py-2" onClick={() => setMenuOpen(false)}>Dashboard</Link>
               <Link to="/analyze" className="block text-gray-300 hover:text-white py-2" onClick={() => setMenuOpen(false)}>Analyze</Link>
+              <Link to="/live" className="block text-red-400 hover:text-red-300 py-2 flex items-center gap-1" onClick={() => setMenuOpen(false)}>
+                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse inline-block"></span>
+                Live
+              </Link>
               <Link to="/history" className="block text-gray-300 hover:text-white py-2" onClick={() => setMenuOpen(false)}>History</Link>
               <div className="border-t border-gray-700 pt-2 mt-2">
                 <span className="block text-gray-400 text-sm mb-2">👤 {user.username || user.email}</span>

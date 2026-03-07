@@ -39,8 +39,8 @@ export const getHistory = () => api.get('/analyze/history');
 
 export const saveGame = (gameData) => api.post('/analyze/save', gameData);
 
-export const getProfile = () => api.get('/users/profile');
+export const getProfile = () => api.get('/player/profile');
 
-export const classifyPlayer = () => api.post('/users/classify');
+export const classifyPlayer = () => api.post('/player/classify');
 
 export default api;
