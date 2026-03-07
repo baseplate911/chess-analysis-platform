@@ -1,0 +1,6 @@
+# XGBoost model files (too large for git, place manually)
+chess_xgboost_model.json
+chess_xgboost_model.pkl
+label_map.json
+features.json
+model_summary.json

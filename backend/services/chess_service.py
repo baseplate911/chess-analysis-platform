@@ -46,10 +46,18 @@ class ChessService:
 
     def _try_load_stockfish(self) -> None:
         """Attempt to load the Stockfish engine; silently fall back to heuristics."""
+        stockfish_path = os.getenv("STOCKFISH_PATH", "stockfish")
         try:
             import chess.engine
-            self.engine = chess.engine.SimpleEngine.popen_uci("stockfish")
+            self.engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
         except Exception:
+            # Try common fallback paths
+            for path in ["/usr/games/stockfish", "/usr/bin/stockfish", "stockfish"]:
+                try:
+                    self.engine = chess.engine.SimpleEngine.popen_uci(path)
+                    return
+                except Exception:
+                    continue
             self.engine = None
 
     # ------------------------------------------------------------------
