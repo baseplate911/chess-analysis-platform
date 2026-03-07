@@ -11,6 +11,26 @@ import chess.pgn
 
 from services.ml_service import MLService
 
+# Allow importing from the ml_model package that lives outside the backend tree.
+# Use importlib to load by file path so we avoid a generic "model" name on sys.path.
+_ML_MODEL_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "ml_model", "blunder_detector")
+)
+
+try:
+    import importlib.util as _importlib_util
+
+    _spec = _importlib_util.spec_from_file_location(
+        "blunder_detector_model",
+        os.path.join(_ML_MODEL_DIR, "model.py"),
+    )
+    _mod = _importlib_util.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    XGBoostMoveClassifier = _mod.XGBoostMoveClassifier
+    _xgboost_classifier = XGBoostMoveClassifier()
+except Exception:  # noqa: BLE001
+    _xgboost_classifier = None
+
 
 class ChessService:
     """Provides chess game and position analysis, using Stockfish when available."""
@@ -63,15 +83,48 @@ class ChessService:
             move_san = board.san(move)
             is_white = board.turn == chess.WHITE
 
+            # Gather move properties before pushing
+            is_capture = int(board.is_capture(move))
+            is_castling = int(board.is_castling(move))
+            is_en_passant = int(board.is_en_passant(move))
+            piece = board.piece_at(move.from_square)
+            piece_type = int(piece.piece_type) if piece else 0
+            promotion = int(move.promotion is not None)
+
             board.push(move)
             move_number += 1
+
+            is_check = int(board.is_check())
+            is_checkmate = int(board.is_checkmate())
 
             eval_after = self._evaluate_position(board)
             perspective_before = eval_before if is_white else -eval_before
             perspective_after = eval_after if is_white else -eval_after
             eval_diff = perspective_before - perspective_after
 
-            classification = self.classify_move(perspective_before, perspective_after)
+            # Build the 14-feature dict for XGBoost classification
+            features_dict = {
+                "move_number": move_number,
+                "color": 1 if is_white else 0,
+                "eval_before": perspective_before,
+                "eval_after": perspective_after,
+                "is_capture": is_capture,
+                "is_check": is_check,
+                "is_checkmate": is_checkmate,
+                "is_castling": is_castling,
+                "is_en_passant": is_en_passant,
+                "piece_type": piece_type,
+                "promotion": promotion,
+                "clock_before": 0.0,   # clock data not yet available from PGN
+                "clock_after": 0.0,    # can be populated from %clk annotations later
+                "time_spent": 0.0,     # ditto
+            }
+
+            if _xgboost_classifier is not None:
+                classification = _xgboost_classifier.predict(features_dict)
+            else:
+                classification = self.classify_move(perspective_before, perspective_after)
+
             features = self.extract_features(board)
 
             # Use eval_after (white's perspective) to compute win probability
