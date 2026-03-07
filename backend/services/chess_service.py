@@ -179,17 +179,23 @@ class ChessService:
         }
 
     def classify_move(self, eval_before: float, eval_after: float) -> str:
-        """Classify a move based on the evaluation change from the current player's perspective."""
+        """Classify a move based on the evaluation change from the current player's perspective.
+
+        Returns Title Case labels consistent with the XGBoost model output:
+        'Brilliant', 'Great', 'Good', 'Inaccuracy', 'Mistake', 'Blunder'.
+        """
         eval_diff = eval_before - eval_after
         if eval_diff > 2.0:
-            return "blunder"
+            return "Blunder"
         if eval_diff > 1.0:
-            return "mistake"
+            return "Mistake"
         if eval_diff > 0.5:
-            return "inaccuracy"
+            return "Inaccuracy"
         if eval_diff > -0.5:
-            return "good"
-        return "best"
+            return "Good"
+        if eval_diff > -1.5:
+            return "Great"
+        return "Brilliant"
 
     def extract_features(self, board: chess.Board) -> List[float]:
         """Extract a numeric feature vector from a chess board for ML input."""
