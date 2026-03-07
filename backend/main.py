@@ -14,7 +14,7 @@ if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 
 from database.database import Base, engine
-from routers import analysis_router, auth_router, player_router
+from routers import analysis_router, auth_router, live_router, player_router
 
 
 @asynccontextmanager
@@ -31,9 +31,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,6 +44,7 @@ app.add_middleware(
 app.include_router(auth_router.router, prefix="/api")
 app.include_router(analysis_router.router, prefix="/api")
 app.include_router(player_router.router, prefix="/api")
+app.include_router(live_router.router, prefix="/api")
 
 
 @app.get("/health", tags=["Health"])

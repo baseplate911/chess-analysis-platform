@@ -9,6 +9,7 @@ import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
 import AnalyzePage from './pages/AnalyzePage';
 import HistoryPage from './pages/HistoryPage';
+import LiveGamePage from './pages/LiveGamePage';
 
 export default function App() {
   return (
@@ -41,6 +42,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <HistoryPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/live"
+              element={
+                <ProtectedRoute>
+                  <LiveGamePage />
                 </ProtectedRoute>
               }
             />

@@ -1,10 +1,12 @@
 import React, { useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Chessboard } from 'react-chessboard';
 import { Chess } from 'chess.js';
 import { analyzeGame, saveGame } from '../api/api';
 import EvaluationBar from '../components/EvaluationBar';
 import MoveList from '../components/MoveList';
 import WinProbabilityChart from '../components/WinProbabilityChart';
+import GameSummaryCard from '../components/GameSummaryCard';
 
 const STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
@@ -26,6 +28,7 @@ function buildFenArray(pgn) {
 }
 
 export default function AnalyzePage() {
+  const navigate = useNavigate();
   const [pgn, setPgn] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -40,7 +43,7 @@ export default function AnalyzePage() {
     ? STARTING_FEN
     : positions[currentMoveIndex + 1] || STARTING_FEN;
 
-  const currentEval = analysisData?.moves?.[currentMoveIndex]?.eval ?? 0;
+  const currentEval = analysisData?.moves?.[currentMoveIndex]?.eval_after ?? 0;
   const currentBestMove = analysisData?.moves?.[currentMoveIndex]?.best_move;
 
   const handleFileUpload = (e) => {
@@ -113,9 +116,18 @@ export default function AnalyzePage() {
   return (
     <div className="min-h-screen bg-gray-900 py-8 px-4" onKeyDown={handleKeyDown} tabIndex={-1}>
       <div className="max-w-7xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-white">Game Analysis</h1>
-          <p className="text-gray-400 mt-1">Paste your PGN below and get AI-powered move-by-move analysis.</p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-white">Game Analysis</h1>
+            <p className="text-gray-400 mt-1">Paste your PGN below and get AI-powered move-by-move analysis.</p>
+          </div>
+          <button
+            onClick={() => navigate('/live')}
+            className="text-red-400 hover:text-red-300 text-sm border border-red-500/40 px-3 py-1 rounded-lg transition-colors flex items-center gap-1"
+          >
+            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse inline-block"></span>
+            🔴 Live Game →
+          </button>
         </div>
 
         {/* PGN Input */}
@@ -258,18 +270,27 @@ export default function AnalyzePage() {
                 </div>
 
                 {/* Summary */}
-                {analysisData.summary && (
-                  <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-                    <h3 className="text-sm font-semibold text-white mb-3">Game Summary</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      {Object.entries(analysisData.summary).map(([key, val]) => (
-                        <div key={key} className="bg-gray-700/50 rounded-lg px-3 py-2">
-                          <div className="text-xs text-gray-400 capitalize">{key.replace(/_/g, ' ')}</div>
-                          <div className="text-sm font-semibold text-white mt-0.5">{String(val)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                {analysisData.moves && analysisData.moves.length > 0 && (
+                  (() => {
+                    const movesArr = analysisData.moves;
+                    const good = movesArr.filter(m => m.classification === 'good').length;
+                    const best = movesArr.filter(m => m.classification === 'best').length;
+                    const total = movesArr.length;
+                    const computedSummary = {
+                      blunders: movesArr.filter(m => m.classification === 'blunder').length,
+                      mistakes: movesArr.filter(m => m.classification === 'mistake').length,
+                      inaccuracies: movesArr.filter(m => m.classification === 'inaccuracy').length,
+                      good,
+                      best,
+                      accuracy: total ? parseFloat(((good + best) / total * 100).toFixed(1)) : 0,
+                    };
+                    return (
+                      <GameSummaryCard
+                        summary={computedSummary}
+                        result={analysisData.result}
+                      />
+                    );
+                  })()
                 )}
               </div>
             </div>
