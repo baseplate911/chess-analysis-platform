@@ -56,8 +56,49 @@ before starting the backend:
 | `label_map.json`            | Maps integer-encoded class indices → label names |
 | `features.json`             | Ordered list of the 14 feature names             |
 
+### `label_map.json` format
+
+The keys must be **integer class indices** (as strings in JSON) and the values
+must be the corresponding label names.  Example:
+
+```json
+{
+  "0": "Brilliant",
+  "1": "Great",
+  "2": "Good",
+  "3": "Inaccuracy",
+  "4": "Mistake",
+  "5": "Blunder"
+}
+```
+
+> **Note:** The order must match the integer-encoded labels produced by the
+> `LabelEncoder` (or equivalent) used during training.
+
 When the files are absent the classifier falls back to a threshold-based
 heuristic using the `eval_before`/`eval_after` difference.
+
+### Backend startup logging
+
+On startup the backend logs one of the following messages to indicate which
+classification path is active:
+
+- **XGBoost active:**
+  ```
+  XGBoost blunder detector loaded successfully (class: XGBoostMoveClassifier).
+  ```
+- **Artifacts missing – heuristic fallback:**
+  ```
+  Blunder detector module loaded (class: XGBoostMoveClassifier) but model artifacts are absent – falling back to threshold heuristic.
+  ```
+- **Module load failure – heuristic fallback:**
+  ```
+  Could not load blunder detector from .../ml_model/blunder_detector: <reason> – using threshold heuristic.
+  ```
+
+To see these messages make sure your logging level is set to `INFO` or lower
+(e.g. `logging.basicConfig(level=logging.INFO)` or the `LOG_LEVEL=INFO`
+environment variable when running with `uvicorn`).
 
 ---
 
