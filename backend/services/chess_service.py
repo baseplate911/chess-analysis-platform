@@ -2,6 +2,7 @@
 """
 
 import io
+import logging
 import math
 import os
 from typing import Dict, List, Optional
@@ -10,6 +11,8 @@ import chess
 import chess.pgn
 
 from services.ml_service import MLService
+
+logger = logging.getLogger(__name__)
 
 # Allow importing from the ml_model package that lives outside the backend tree.
 # Use importlib to load by file path so we avoid a generic "model" name on sys.path.
@@ -26,9 +29,35 @@ try:
     )
     _mod = _importlib_util.module_from_spec(_spec)
     _spec.loader.exec_module(_mod)
-    XGBoostMoveClassifier = _mod.XGBoostMoveClassifier
-    _xgboost_classifier = XGBoostMoveClassifier()
-except Exception:  # noqa: BLE001
+
+    # Prefer XGBoostMoveClassifier; fall back to BlunderDetectorModel alias for
+    # compatibility with older or user-supplied versions of model.py.
+    _classifier_cls = getattr(_mod, "XGBoostMoveClassifier", None) or getattr(
+        _mod, "BlunderDetectorModel", None
+    )
+    if _classifier_cls is None:
+        raise ImportError(
+            "Neither XGBoostMoveClassifier nor BlunderDetectorModel found in the blunder detector module"
+        )
+
+    _xgboost_classifier = _classifier_cls()
+    if getattr(_xgboost_classifier, "_clf", None) is not None:
+        logger.info(
+            "XGBoost blunder detector loaded successfully (class: %s).",
+            _classifier_cls.__name__,
+        )
+    else:
+        logger.info(
+            "Blunder detector module loaded (class: %s) but model artifacts are absent "
+            "– falling back to threshold heuristic.",
+            _classifier_cls.__name__,
+        )
+except Exception as _exc:  # noqa: BLE001
+    logger.warning(
+        "Could not load blunder detector from %s: %s – using threshold heuristic.",
+        _ML_MODEL_DIR,
+        _exc,
+    )
     _xgboost_classifier = None
 
 
