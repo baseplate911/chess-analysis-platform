@@ -1,0 +1,16 @@
+[
+    "move_number",
+    "color",
+    "eval_before",
+    "eval_after",
+    "is_capture",
+    "is_check",
+    "is_checkmate",
+    "is_castling",
+    "is_en_passant",
+    "piece_type",
+    "promotion",
+    "clock_before",
+    "clock_after",
+    "time_spent"
+]
