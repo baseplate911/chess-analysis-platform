@@ -19,19 +19,21 @@ _GAME_OVER_STATUSES = {"mate", "resign", "draw", "stalemate", "timeout", "outoft
 
 def _compute_summary(moves_analysis: list) -> dict:
     """Compute game summary statistics from a list of move analysis dicts."""
-    blunders = sum(1 for m in moves_analysis if m.get("classification") == "blunder")
-    mistakes = sum(1 for m in moves_analysis if m.get("classification") == "mistake")
-    inaccuracies = sum(1 for m in moves_analysis if m.get("classification") == "inaccuracy")
-    good = sum(1 for m in moves_analysis if m.get("classification") == "good")
-    best = sum(1 for m in moves_analysis if m.get("classification") == "best")
+    blunders = sum(1 for m in moves_analysis if m.get("classification") == "Blunder")
+    mistakes = sum(1 for m in moves_analysis if m.get("classification") == "Mistake")
+    inaccuracies = sum(1 for m in moves_analysis if m.get("classification") == "Inaccuracy")
+    good = sum(1 for m in moves_analysis if m.get("classification") == "Good")
+    great = sum(1 for m in moves_analysis if m.get("classification") == "Great")
+    brilliant = sum(1 for m in moves_analysis if m.get("classification") == "Brilliant")
     total = len(moves_analysis)
-    accuracy = round((good + best) / total * 100, 1) if total else 0.0
+    accuracy = round((good + great + brilliant) / total * 100, 1) if total else 0.0
     return {
         "blunders": blunders,
         "mistakes": mistakes,
         "inaccuracies": inaccuracies,
         "good": good,
-        "best": best,
+        "great": great,
+        "brilliant": brilliant,
         "accuracy": accuracy,
     }
 
@@ -67,6 +69,9 @@ def _parse_moves(moves_str: str, moves_analysis: list) -> list:
         classification = _chess_service.classify_move(perspective_before, perspective_after)
         features = _chess_service.extract_features(board)
         probs = _ml_service.predict_win_probability([eval_after] + features[1:])
+        classification = _chess_service.classify_move(perspective_before, perspective_after)
+        print(f"Move {move_number}: {move_san} | Classification: '{classification}'")
+        features = _chess_service.extract_features(board)
 
         result.append({
             "move_number": move_number,

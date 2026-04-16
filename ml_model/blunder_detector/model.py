@@ -39,11 +39,11 @@ FEATURES = [
 
 # eval_diff thresholds (in pawns, positive = worsening) used as fallback
 _THRESHOLDS = [
-    (2.0, "Blunder"),
-    (1.0, "Mistake"),
-    (0.5, "Inaccuracy"),
-    (-0.5, "Good"),
-    (-1.5, "Great"),
+    (1.5, "Blunder"),     # 5
+    (0.75, "Mistake"),    # 4
+    (0.25, "Inaccuracy"), # 3
+    (-0.25, "Good"),      # 2
+    (-1.0, "Great"),      # 1
 ]
 
 

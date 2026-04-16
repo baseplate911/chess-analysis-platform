@@ -1,11 +1,12 @@
 import React, { useRef, useEffect } from 'react';
 
 const classificationStyles = {
-  Blunder: { bg: 'bg-red-100', text: 'text-red-800', emoji: '🔴' },
-  Mistake: { bg: 'bg-orange-100', text: 'text-orange-800', emoji: '🟠' },
-  Inaccuracy: { bg: 'bg-yellow-100', text: 'text-yellow-800', emoji: '🟡' },
+  Brilliant: { bg: 'bg-purple-100', text: 'text-purple-800', emoji: '💫' },
+  Great: { bg: 'bg-indigo-100', text: 'text-indigo-800', emoji: '⭐' },
   Good: { bg: 'bg-green-100', text: 'text-green-800', emoji: '🟢' },
-  Best: { bg: 'bg-blue-100', text: 'text-blue-800', emoji: '⭐' },
+  Inaccuracy: { bg: 'bg-yellow-100', text: 'text-yellow-800', emoji: '🟡' },
+  Mistake: { bg: 'bg-orange-100', text: 'text-orange-800', emoji: '🟠' },
+  Blunder: { bg: 'bg-red-100', text: 'text-red-800', emoji: '🔴' },
 };
 
 function MoveChip({ moveData, index, isSelected, onClick }) {

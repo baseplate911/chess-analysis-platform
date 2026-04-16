@@ -3,6 +3,10 @@
 import os
 import sys
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+# Load environment variables from .env file FIRST
+load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +18,6 @@ if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 
 from database.database import Base, engine
-#from routers import analysis_router, auth_router, live_router, player_router
 from routers import analysis_router, auth_router, live_router, player_router, test_router
 
 

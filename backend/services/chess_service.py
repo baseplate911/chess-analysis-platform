@@ -4,6 +4,8 @@
 import io
 import math
 import os
+import stat
+import subprocess
 from typing import Dict, List, Optional
 
 import chess
@@ -28,7 +30,9 @@ try:
     _spec.loader.exec_module(_mod)
     XGBoostMoveClassifier = _mod.XGBoostMoveClassifier
     _xgboost_classifier = XGBoostMoveClassifier()
-except Exception:  # noqa: BLE001
+    print(f"[DEBUG] XGBoost classifier loaded: {_xgboost_classifier is not None}")
+except Exception as e:  # noqa: BLE001
+    print(f"[DEBUG] Failed to load XGBoost classifier: {e}")
     _xgboost_classifier = None
 
 
@@ -38,6 +42,7 @@ class ChessService:
     def __init__(self):
         self.ml_service = MLService()
         self.engine = None
+        self._stockfish_attempted = False
         self._try_load_stockfish()
 
     # ------------------------------------------------------------------
@@ -45,19 +50,31 @@ class ChessService:
     # ------------------------------------------------------------------
 
     def _try_load_stockfish(self) -> None:
-        """Attempt to load the Stockfish engine; silently fall back to heuristics."""
-        stockfish_path = os.getenv("STOCKFISH_PATH", "stockfish")
+        """Configure Stockfish path (lazy-load on first use to avoid Windows asyncio issues)."""
+        self.stockfish_path = os.getenv("STOCKFISH_PATH", "stockfish")
+        print(f"[DEBUG] Stockfish path configured: {self.stockfish_path}")
+
+    def _ensure_stockfish_loaded(self) -> None:
+        """Lazy-load Stockfish on first use using stockfish library."""
+        if self.engine is not None:
+            return  # Already loaded
+        
+        if self._stockfish_attempted:
+            return  # Already tried and failed
+        
+        self._stockfish_attempted = True
+        
+        if not os.path.exists(self.stockfish_path):
+            print(f"[DEBUG] ✗ Stockfish not found at: {self.stockfish_path}")
+            return
+        
         try:
-            import chess.engine
-            self.engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
-        except Exception:
-            # Try common fallback paths
-            for path in ["/usr/games/stockfish", "/usr/bin/stockfish", "stockfish"]:
-                try:
-                    self.engine = chess.engine.SimpleEngine.popen_uci(path)
-                    return
-                except Exception:
-                    continue
+            from stockfish import Stockfish
+            print(f"[DEBUG] Attempting to load Stockfish from: {self.stockfish_path}")
+            self.engine = Stockfish(path=self.stockfish_path, depth=12)
+            print(f"[DEBUG] ✓ Stockfish loaded successfully!")
+        except Exception as e:
+            print(f"[DEBUG] ✗ Failed to load Stockfish: {type(e).__name__}: {e}")
             self.engine = None
 
     # ------------------------------------------------------------------
@@ -115,9 +132,9 @@ class ChessService:
                 "is_en_passant": is_en_passant,
                 "piece_type": piece_type,
                 "promotion": promotion,
-                "clock_before": 0.0,   # clock data not yet available from PGN
-                "clock_after": 0.0,    # can be populated from %clk annotations later
-                "time_spent": 0.0,     # ditto
+                "clock_before": 0.0,
+                "clock_after": 0.0,
+                "time_spent": 0.0,
             }
 
             if _xgboost_classifier is not None:
@@ -150,6 +167,10 @@ class ChessService:
             )
 
             eval_before = eval_after
+            
+            # DEBUG: Print first 5 moves
+            if move_number <= 5:
+                print(f"[MOVE {move_number}] {move_san} | eval_diff: {eval_diff:.3f} | class: {classification}")
 
         result = game.headers.get("Result", "*")
         return {
@@ -179,21 +200,24 @@ class ChessService:
         }
 
     def classify_move(self, eval_before: float, eval_after: float) -> str:
-        """Classify a move based on the evaluation change from the current player's perspective.
-
-        Returns Title Case labels consistent with the XGBoost model output:
-        'Brilliant', 'Great', 'Good', 'Inaccuracy', 'Mistake', 'Blunder'.
+        """Classify a move based on evaluation change (matches trained XGBoost model).
+        
+        Thresholds from trained model:
+        - eval_diff > 1.0: Mistake
+        - eval_diff > 0.5: Inaccuracy
+        - eval_diff >= -0.5: Good
+        - eval_diff >= -1.5: Great
+        - Otherwise: Brilliant
         """
         eval_diff = eval_before - eval_after
-        if eval_diff > 2.0:
-            return "Blunder"
+        
         if eval_diff > 1.0:
             return "Mistake"
         if eval_diff > 0.5:
             return "Inaccuracy"
-        if eval_diff > -0.5:
+        if eval_diff >= -0.5:
             return "Good"
-        if eval_diff > -1.5:
+        if eval_diff >= -1.5:
             return "Great"
         return "Brilliant"
 
@@ -250,18 +274,22 @@ class ChessService:
 
     def _evaluate_position(self, board: chess.Board) -> float:
         """Return evaluation of the position (positive = White advantage)."""
+        self._ensure_stockfish_loaded()
+        
         if self.engine:
             try:
-                import chess.engine
-                info = self.engine.analyse(board, chess.engine.Limit(depth=12))
-                score = info["score"].white()
-                if score.is_mate():
-                    mate_in = score.mate()
-                    return 100.0 if mate_in and mate_in > 0 else -100.0
-                cp = score.score()
-                return (cp or 0) / 100.0
-            except Exception:
-                pass
+                from stockfish import Stockfish
+                fen = board.fen()
+                self.engine.set_fen_position(fen)
+                eval_dict = self.engine.get_evaluation()
+                
+                if eval_dict['type'] == 'mate':
+                    return 100.0 if eval_dict['value'] > 0 else -100.0
+                else:
+                    return eval_dict['value'] / 100.0
+            except Exception as e:
+                print(f"[DEBUG] Stockfish evaluation failed: {e}. Falling back to heuristic.")
+                return self._heuristic_evaluation(board)
 
         return self._heuristic_evaluation(board)
 
@@ -329,11 +357,15 @@ class ChessService:
 
     def _get_best_move(self, board: chess.Board) -> str:
         """Return the best move in UCI notation, falling back to the first legal move."""
+        self._ensure_stockfish_loaded()
+        
         if self.engine:
             try:
-                import chess.engine
-                result = self.engine.play(board, chess.engine.Limit(depth=12))
-                return result.move.uci() if result.move else ""
+                from stockfish import Stockfish
+                fen = board.fen()
+                self.engine.set_fen_position(fen)
+                best_move = self.engine.get_best_move()
+                return best_move if best_move else ""
             except Exception:
                 pass
 

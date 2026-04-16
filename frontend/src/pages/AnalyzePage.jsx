@@ -13,18 +13,25 @@ const STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 function buildFenArray(pgn) {
   const chess = new Chess();
   try {
-    chess.loadPgn(pgn);
-  } catch {
+    const movesOnly = pgn
+      .replace(/\[.*?\]/gs, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    chess.loadPgn(movesOnly);
+    
+    const history = chess.history({ verbose: true });
+    const fens = [STARTING_FEN];
+    const replay = new Chess();
+    for (const move of history) {
+      replay.move(move.san);
+      fens.push(replay.fen());
+    }
+    return fens;
+  } catch (err) {
+    console.error('PGN parsing failed:', err);
     return null;
   }
-  const history = chess.history({ verbose: true });
-  const fens = [STARTING_FEN];
-  const replay = new Chess();
-  for (const move of history) {
-    replay.move(move.san);
-    fens.push(replay.fen());
-  }
-  return fens;
 }
 
 export default function AnalyzePage() {
@@ -273,18 +280,25 @@ export default function AnalyzePage() {
                 {analysisData.moves && analysisData.moves.length > 0 && (
                   (() => {
                     const movesArr = analysisData.moves;
-                    const good = movesArr.filter(m => m.classification === 'good').length;
-                    const best = movesArr.filter(m => m.classification === 'best').length;
+                    const blundersCount = movesArr.filter(m => m.classification === 'Blunder').length;
+                    const mistakesCount = movesArr.filter(m => m.classification === 'Mistake').length;
+                    const inaccuraciesCount = movesArr.filter(m => m.classification === 'Inaccuracy').length;
+                    const goodCount = movesArr.filter(m => m.classification === 'Good').length;
+                    const greatCount = movesArr.filter(m => m.classification === 'Great').length;
+                    const brilliantCount = movesArr.filter(m => m.classification === 'Brilliant').length;
                     const total = movesArr.length;
-                   const computedSummary = {
-  blunders: movesArr.filter(m => m.classification === 'Blunder').length,
-  mistakes: movesArr.filter(m => m.classification === 'Mistake').length,
-  inaccuracies: movesArr.filter(m => m.classification === 'Inaccuracy').length,
-  good: movesArr.filter(m => m.classification === 'Good').length,
-  best: movesArr.filter(m => m.classification === 'Great' || m.classification === 'Brilliant').length,
-  total: movesArr.length,
-  accuracy: total ? parseFloat(((good + best) / total * 100).toFixed(1)) : 0,
-};
+                    
+                    const computedSummary = {
+                      blunders: blundersCount,
+                      mistakes: mistakesCount,
+                      inaccuracies: inaccuraciesCount,
+                      good: goodCount,
+                      great: greatCount,
+                      brilliant: brilliantCount,
+                      total: total,
+                      accuracy: total ? parseFloat(((goodCount + greatCount + brilliantCount) / total * 100).toFixed(1)) : 0,
+                    };
+                    
                     return (
                       <GameSummaryCard
                         summary={computedSummary}

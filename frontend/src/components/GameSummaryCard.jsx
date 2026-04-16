@@ -2,10 +2,11 @@ import React from 'react';
 
 const classificationConfig = {
   blunder: { emoji: '🔴', label: 'Blunders', color: 'text-red-400', bg: 'bg-red-900/20 border-red-700/40' },
-  mistakes: { emoji: '🟠', label: 'Mistakes', color: 'text-orange-400', bg: 'bg-orange-900/20 border-orange-700/40' },
-  inaccuracies: { emoji: '🟡', label: 'Inaccuracies', color: 'text-yellow-400', bg: 'bg-yellow-900/20 border-yellow-700/40' },
+  mistake: { emoji: '🟠', label: 'Mistakes', color: 'text-orange-400', bg: 'bg-orange-900/20 border-orange-700/40' },
+  inaccuracy: { emoji: '🟡', label: 'Inaccuracies', color: 'text-yellow-400', bg: 'bg-yellow-900/20 border-yellow-700/40' },
   good: { emoji: '🟢', label: 'Good Moves', color: 'text-green-400', bg: 'bg-green-900/20 border-green-700/40' },
-  best: { emoji: '⭐', label: 'Best Moves', color: 'text-blue-400', bg: 'bg-blue-900/20 border-blue-700/40' },
+  great: { emoji: '⭐', label: 'Great Moves', color: 'text-blue-400', bg: 'bg-blue-900/20 border-blue-700/40' },
+  brilliant: { emoji: '💫', label: 'Brilliant Moves', color: 'text-purple-400', bg: 'bg-purple-900/20 border-purple-700/40' },
   accuracy: { emoji: '📊', label: 'Accuracy', color: 'text-indigo-400', bg: 'bg-indigo-900/20 border-indigo-700/40' },
 };
 
@@ -14,10 +15,11 @@ export default function GameSummaryCard({ summary, result }) {
 
   const stats = [
     { key: 'blunder', value: summary.blunders },
-    { key: 'mistakes', value: summary.mistakes },
-    { key: 'inaccuracies', value: summary.inaccuracies },
+    { key: 'mistake', value: summary.mistakes },
+    { key: 'inaccuracy', value: summary.inaccuracies },
     { key: 'good', value: summary.good },
-    { key: 'best', value: summary.best },
+    { key: 'great', value: summary.great },
+    { key: 'brilliant', value: summary.brilliant },
     { key: 'accuracy', value: `${summary.accuracy}%` },
   ];
 
