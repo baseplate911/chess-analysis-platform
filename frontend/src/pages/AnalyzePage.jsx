@@ -276,14 +276,15 @@ export default function AnalyzePage() {
                     const good = movesArr.filter(m => m.classification === 'good').length;
                     const best = movesArr.filter(m => m.classification === 'best').length;
                     const total = movesArr.length;
-                    const computedSummary = {
-                      blunders: movesArr.filter(m => m.classification === 'blunder').length,
-                      mistakes: movesArr.filter(m => m.classification === 'mistake').length,
-                      inaccuracies: movesArr.filter(m => m.classification === 'inaccuracy').length,
-                      good,
-                      best,
-                      accuracy: total ? parseFloat(((good + best) / total * 100).toFixed(1)) : 0,
-                    };
+                   const computedSummary = {
+  blunders: movesArr.filter(m => m.classification === 'Blunder').length,
+  mistakes: movesArr.filter(m => m.classification === 'Mistake').length,
+  inaccuracies: movesArr.filter(m => m.classification === 'Inaccuracy').length,
+  good: movesArr.filter(m => m.classification === 'Good').length,
+  best: movesArr.filter(m => m.classification === 'Great' || m.classification === 'Brilliant').length,
+  total: movesArr.length,
+  accuracy: total ? parseFloat(((good + best) / total * 100).toFixed(1)) : 0,
+};
                     return (
                       <GameSummaryCard
                         summary={computedSummary}
