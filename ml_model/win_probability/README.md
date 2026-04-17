@@ -31,7 +31,7 @@ This module uses a fine-tuned **LSTM** model for chess game outcome prediction.
 ## Required Assets
 
 - `final_lstm_model_finetuned.h5` (model weights)
-- `move_to_idx.pkl` (move vocabulary, 7,340 unique moves)
+- `move_to_idx.pkl` (move vocabulary; reference model uses 7,340 unique moves)
 - `scaler.pkl` (numeric feature scaler)
 - `model_metadata.json` (metadata/performance)
 

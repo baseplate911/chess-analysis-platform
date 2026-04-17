@@ -19,10 +19,10 @@ import numpy as np
 
 try:
     import tensorflow as tf
-except Exception:  # noqa: BLE001
+except ImportError:
     tf = None
 
-from ml_model.win_probability.build_model import MAX_MOVES, build_lstm_win_probability_model
+from ml_model.win_probability.constants import MAX_MOVES, MIN_VOCAB_SIZE, NUMERIC_FEATURES
 
 logger = logging.getLogger(__name__)
 
@@ -103,14 +103,11 @@ class WinProbabilityModel:
             return
 
         try:
+            from ml_model.win_probability.build_model import build_lstm_win_probability_model
+
             vocab_size = max(self._move_to_idx.values(), default=0) + 1
-            self._model = build_lstm_win_probability_model(vocab_size=max(vocab_size, 2))
+            self._model = build_lstm_win_probability_model(vocab_size=max(vocab_size, MIN_VOCAB_SIZE))
             self._model.load_weights(self.model_path)
-            self._model.compile(
-                optimizer="adam",
-                loss="sparse_categorical_crossentropy",
-                metrics=["accuracy"],
-            )
             logger.info("Loaded LSTM win-probability weights from %s", self.model_path)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Could not load LSTM model weights from %s: %s", self.model_path, exc)
@@ -149,7 +146,8 @@ class WinProbabilityModel:
         return [], 1500.0, 1500.0, 0.0
 
     def _encode_moves(self, move_sequence: Sequence[str]) -> np.ndarray:
-        encoded_seq = [self._move_to_idx.get(move, 0) for move in move_sequence]
+        unknown_idx = self._move_to_idx.get("<UNK>", 0)
+        encoded_seq = [self._move_to_idx.get(move, unknown_idx) for move in move_sequence]
         if len(encoded_seq) < MAX_MOVES:
             encoded_seq += [0] * (MAX_MOVES - len(encoded_seq))
         else:
@@ -162,8 +160,8 @@ class WinProbabilityModel:
         if hasattr(self._scaler, "transform"):
             return self._scaler.transform(numeric)
         if isinstance(self._scaler, dict):
-            mean = np.array(self._scaler.get("mean", [0.0, 0.0, 0.0]), dtype=float)
-            scale = np.array(self._scaler.get("scale", [1.0, 1.0, 1.0]), dtype=float)
+            mean = np.array(self._scaler.get("mean", [0.0] * NUMERIC_FEATURES), dtype=float)
+            scale = np.array(self._scaler.get("scale", [1.0] * NUMERIC_FEATURES), dtype=float)
             scale = np.where(scale == 0, 1.0, scale)
             return (numeric - mean) / scale
         return numeric

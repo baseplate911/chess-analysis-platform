@@ -4,17 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
+from ml_model.win_probability.constants import MAX_MOVES, NUMERIC_FEATURES
+
 try:
     import tensorflow as tf
-except Exception:  # noqa: BLE001
+except ImportError:
     tf = None
 
-
-MAX_MOVES = 100
 EMBEDDING_DIM = 64
 LSTM_UNITS = 128
-NUMERIC_FEATURES = 3  # white_elo, black_elo, material
-OUTPUT_CLASSES = 3    # white_win, black_win, draw
+OUTPUT_CLASSES = 3  # white_win, black_win, draw
 
 
 def build_lstm_win_probability_model(vocab_size: int) -> Any:
