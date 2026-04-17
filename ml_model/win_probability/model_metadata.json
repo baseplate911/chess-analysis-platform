@@ -1,0 +1,22 @@
+{
+  "model_name": "win_probability_lstm_finetuned",
+  "framework": "tensorflow/keras",
+  "input": {
+    "move_sequence_max_len": 100,
+    "numeric_features": ["white_elo", "black_elo", "material"]
+  },
+  "classes": ["white_win", "black_win", "draw"],
+  "move_vocabulary_size": 7340,
+  "metrics": {
+    "test_accuracy": 0.9043,
+    "train_accuracy": 0.9124,
+    "validation_accuracy": 0.9075,
+    "white_win_recall": 0.9226,
+    "black_win_recall": 0.9441
+  },
+  "training_data": {
+    "total_games": 171332,
+    "original_games": 121332,
+    "fine_tuning_games": 50000
+  }
+}
