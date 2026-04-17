@@ -21,6 +21,8 @@ env/
 ml_model/**/*.pkl
 ml_model/**/*.h5
 ml_model/**/*.joblib
+!ml_model/win_probability/move_to_idx.pkl
+!ml_model/win_probability/scaler.pkl
 
 # XGBoost model files (too large for git, place manually)
 ml_model/blunder_detector/chess_xgboost_model.json

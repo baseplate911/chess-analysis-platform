@@ -9,15 +9,18 @@ work alongside the platform's backend API.
 
 ### 1. Win Probability Predictor (`win_probability/`)
 
-Predicts the probability of **white win / draw / black win** given a 16-feature
-position vector.
+Predicts the probability of **white win / draw / black win** using a fine-tuned
+LSTM over move sequences plus numeric features.
 
 | File | Description |
 |---|---|
-| `model.py` | `WinProbabilityModel` class – sklearn `MLPClassifier` or sigmoid heuristic |
-| `train.py` | Training script – generates synthetic data and saves `chess_win_model.pkl` |
+| `build_model.py` | LSTM architecture builder (Embedding 64 + LSTM 128 + numeric fusion) |
+| `model.py` | `WinProbabilityModel` class – loads move encoder/scaler and LSTM weights |
+| `README.md` | Model-specific architecture, metrics, and asset requirements |
 
-**Output:** `{"white_win": float, "draw": float, "black_win": float}`
+**Output:** `{"white_win": float, "black_win": float, "draw": float}`
+
+**Performance:** 90.43% test accuracy (171,332 games)
 
 ---
 
@@ -172,13 +175,18 @@ Replace the synthetic-data generation in each `train.py` with your real
 feature matrix and labels, then run:
 
 ```bash
-python ml_model/win_probability/train.py
+# Win-probability uses the LSTM pipeline and weight files in ml_model/win_probability/
+# (see ml_model/win_probability/README.md)
 python ml_model/blunder_detector/train.py
 python ml_model/player_behaviour/train.py
 ```
 
-The `.pkl` files will be written next to the respective `train.py` and
-loaded automatically by each model class.
+The classifier `.pkl` files are written next to the respective `train.py`.
+The win-probability model loads:
+- `final_lstm_model_finetuned.h5`
+- `move_to_idx.pkl`
+- `scaler.pkl`
+- `model_metadata.json`
 
 ---
 
@@ -187,7 +195,8 @@ loaded automatically by each model class.
 ```
 scikit-learn
 numpy
-joblib
+tensorflow
+keras
 python-chess
 ```
 

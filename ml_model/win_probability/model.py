@@ -1,151 +1,182 @@
 """
-Win Probability Predictor
-=========================
-Predicts the probability of white win / draw / black win given a numeric
-feature vector whose first element is the material balance in centipawns.
-
-If a trained model file (chess_win_model.pkl) is present it will be used
-directly; otherwise a sigmoid-based heuristic is applied.
+LSTM Win Probability Predictor
+==============================
+Predicts white-win / black-win / draw probabilities from move sequences and
+numeric features. If model assets are missing, falls back to a material-based
+heuristic so the API remains available.
 """
 
+from __future__ import annotations
+
+import json
+import logging
 import math
 import os
-import logging
-from typing import List
+import pickle
+from typing import Any, Dict, List, Sequence, Tuple
 
-import joblib
 import numpy as np
+
+try:
+    import tensorflow as tf
+except Exception:  # noqa: BLE001
+    tf = None
+
+from ml_model.win_probability.build_model import MAX_MOVES, build_lstm_win_probability_model
 
 logger = logging.getLogger(__name__)
 
-_MODEL_FILE = os.path.join(os.path.dirname(__file__), "chess_win_model.pkl")
+_MODULE_DIR = os.path.dirname(__file__)
+_WEIGHTS_FILE = os.path.join(_MODULE_DIR, "final_lstm_model_finetuned.h5")
+_MOVE_IDX_FILE = os.path.join(_MODULE_DIR, "move_to_idx.pkl")
+_SCALER_FILE = os.path.join(_MODULE_DIR, "scaler.pkl")
+_METADATA_FILE = os.path.join(_MODULE_DIR, "model_metadata.json")
 
 
 class WinProbabilityModel:
     """Predicts win / draw / black-win probabilities for a chess position."""
 
-    def __init__(self, model_path: str = _MODEL_FILE) -> None:
+    def __init__(
+        self,
+        model_path: str = _WEIGHTS_FILE,
+        move_idx_path: str = _MOVE_IDX_FILE,
+        scaler_path: str = _SCALER_FILE,
+        metadata_path: str = _METADATA_FILE,
+    ) -> None:
         self.model_path = model_path
-        self._clf = None
-        self._load_if_exists()
+        self.move_idx_path = move_idx_path
+        self.scaler_path = scaler_path
+        self.metadata_path = metadata_path
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+        self._model = None
+        self._move_to_idx: Dict[str, int] = {}
+        self._scaler = None
+        self.metadata: Dict[str, Any] = {}
+        self._load_assets()
 
-    def predict(self, features: List[float]) -> dict:
-        """Return win-probability distribution for the given feature vector.
+    def predict(self, features: Any) -> dict:
+        """Return win-probability distribution.
 
-        Parameters
-        ----------
-        features:
-            Numeric feature vector.  ``features[0]`` must be the material
-            balance in centipawns (positive = white ahead).
-
-        Returns
-        -------
-        dict with keys ``"white_win"``, ``"draw"``, ``"black_win"`` – each a
-        float in [0, 1] that sum to 1.
+        Backward-compatible inputs:
+        - Previous numeric feature vector (list/tuple/ndarray) where index 0 is
+          material in centipawns.
+        - Dict input with keys: move_sequence, white_elo, black_elo, material.
         """
-        if self._clf is not None:
-            return self._predict_with_model(features)
-        return self._heuristic_predict(features)
+        moves, white_elo, black_elo, material = self._parse_input(features)
 
-    def save(self, path: str = None) -> None:
-        """Persist the fitted classifier to *path* (defaults to model_path)."""
-        if self._clf is None:
-            raise RuntimeError("No model loaded or trained – nothing to save.")
-        target = path or self.model_path
-        joblib.dump(self._clf, target)
-        logger.info("WinProbabilityModel saved to %s", target)
+        if self._model is None or self._scaler is None:
+            return self._heuristic_predict(material)
 
-    def load(self, path: str = None) -> None:
-        """Load a previously saved classifier from *path*."""
-        source = path or self.model_path
-        self._clf = joblib.load(source)
-        logger.info("WinProbabilityModel loaded from %s", source)
+        encoded = self._encode_moves(moves)
+        numeric = np.array([[white_elo, black_elo, material]], dtype=float)
+        scaled_numeric = self._scale_numeric(numeric)
+        pred = self._model.predict([encoded, scaled_numeric], verbose=0)[0]
 
-    # ------------------------------------------------------------------
-    # Classmethod – stub creation
-    # ------------------------------------------------------------------
-
-    @classmethod
-    def create_stub_model(cls, save_path: str = _MODEL_FILE) -> "WinProbabilityModel":
-        """Create a stub MLPClassifier trained on synthetic data and save it.
-
-        The synthetic dataset simulates positions parameterised by 16 features
-        (matching FeatureExtractor output).  Labels are derived from material
-        balance so the stub is at least directionally sensible.
-
-        Returns a ready-to-use WinProbabilityModel instance.
-        """
-        from sklearn.neural_network import MLPClassifier
-
-        rng = np.random.default_rng(42)
-        n_samples = 2000
-        n_features = 16
-
-        # Feature matrix: random positions
-        X = rng.normal(0, 1, (n_samples, n_features))
-        # material_balance lives in feature[0], scaled to ±8 pawns
-        X[:, 0] = rng.normal(0, 300, n_samples)
-
-        # Labels: 0=black win, 1=draw, 2=white win – driven by material balance
-        material = X[:, 0]
-        white_prob = 1 / (1 + np.exp(-material / 400))
-        rand = rng.random(n_samples)
-        y = np.where(rand < white_prob * 0.6, 2,
-                     np.where(rand < white_prob * 0.6 + 0.25, 1, 0))
-
-        clf = MLPClassifier(
-            hidden_layer_sizes=(64, 32),
-            max_iter=300,
-            random_state=42,
-        )
-        clf.fit(X, y)
-
-        instance = cls.__new__(cls)
-        instance.model_path = save_path
-        instance._clf = clf
-        instance.save(save_path)
-        logger.info("Stub WinProbabilityModel created and saved to %s", save_path)
-        return instance
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    def _load_if_exists(self) -> None:
-        if os.path.exists(self.model_path):
-            try:
-                self.load(self.model_path)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Could not load model from %s: %s", self.model_path, exc)
-                self._clf = None
-
-    def _predict_with_model(self, features: List[float]) -> dict:
-        X = np.array(features, dtype=float).reshape(1, -1)
-        proba = self._clf.predict_proba(X)[0]
-        classes = list(self._clf.classes_)
-        # classes are 0=black win, 1=draw, 2=white win
-        proba_map = {c: p for c, p in zip(classes, proba)}
+        white_win = float(pred[0])
+        black_win = float(pred[1])
+        draw = float(pred[2])
+        total = white_win + black_win + draw
+        if total <= 0:
+            return self._heuristic_predict(material)
         return {
-            "white_win": float(proba_map.get(2, 0.0)),
-            "draw": float(proba_map.get(1, 0.0)),
-            "black_win": float(proba_map.get(0, 0.0)),
+            "white_win": white_win / total,
+            "black_win": black_win / total,
+            "draw": draw / total,
         }
 
+    def _load_assets(self) -> None:
+        self.metadata = self._load_metadata(self.metadata_path)
+        self._move_to_idx = self._load_pickle(self.move_idx_path, default={})
+        self._scaler = self._load_pickle(self.scaler_path, default=None)
+
+        if tf is None:
+            logger.warning("TensorFlow is unavailable; using heuristic win-probability fallback.")
+            return
+        if not self._move_to_idx:
+            logger.warning("Move encoder not found/empty at %s; using heuristic fallback.", self.move_idx_path)
+            return
+        if self._scaler is None:
+            logger.warning("Numeric scaler not found at %s; using heuristic fallback.", self.scaler_path)
+            return
+        if not os.path.exists(self.model_path):
+            logger.warning("LSTM weight file not found at %s; using heuristic fallback.", self.model_path)
+            return
+
+        try:
+            vocab_size = max(self._move_to_idx.values(), default=0) + 1
+            self._model = build_lstm_win_probability_model(vocab_size=max(vocab_size, 2))
+            self._model.load_weights(self.model_path)
+            self._model.compile(
+                optimizer="adam",
+                loss="sparse_categorical_crossentropy",
+                metrics=["accuracy"],
+            )
+            logger.info("Loaded LSTM win-probability weights from %s", self.model_path)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not load LSTM model weights from %s: %s", self.model_path, exc)
+            self._model = None
+
     @staticmethod
-    def _heuristic_predict(features: List[float]) -> dict:
-        """Sigmoid heuristic using material balance (features[0], centipawns)."""
-        material_balance = float(features[0]) if features else 0.0
+    def _load_pickle(path: str, default: Any) -> Any:
+        try:
+            with open(path, "rb") as f:
+                return pickle.load(f)
+        except Exception:  # noqa: BLE001
+            return default
+
+    @staticmethod
+    def _load_metadata(path: str) -> Dict[str, Any]:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:  # noqa: BLE001
+            return {}
+
+    @staticmethod
+    def _parse_input(features: Any) -> Tuple[Sequence[str], float, float, float]:
+        if isinstance(features, dict):
+            moves = features.get("move_sequence") or []
+            white_elo = float(features.get("white_elo", 1500))
+            black_elo = float(features.get("black_elo", 1500))
+            material = float(features.get("material", 0))
+            return moves, white_elo, black_elo, material
+
+        if isinstance(features, (list, tuple, np.ndarray)):
+            seq = list(features)
+            material = float(seq[0]) if seq else 0.0
+            return [], 1500.0, 1500.0, material
+
+        return [], 1500.0, 1500.0, 0.0
+
+    def _encode_moves(self, move_sequence: Sequence[str]) -> np.ndarray:
+        encoded_seq = [self._move_to_idx.get(move, 0) for move in move_sequence]
+        if len(encoded_seq) < MAX_MOVES:
+            encoded_seq += [0] * (MAX_MOVES - len(encoded_seq))
+        else:
+            encoded_seq = encoded_seq[:MAX_MOVES]
+        return np.array([encoded_seq], dtype=np.int32)
+
+    def _scale_numeric(self, numeric: np.ndarray) -> np.ndarray:
+        if self._scaler is None:
+            return numeric
+        if hasattr(self._scaler, "transform"):
+            return self._scaler.transform(numeric)
+        if isinstance(self._scaler, dict):
+            mean = np.array(self._scaler.get("mean", [0.0, 0.0, 0.0]), dtype=float)
+            scale = np.array(self._scaler.get("scale", [1.0, 1.0, 1.0]), dtype=float)
+            scale = np.where(scale == 0, 1.0, scale)
+            return (numeric - mean) / scale
+        return numeric
+
+    @staticmethod
+    def _heuristic_predict(material_balance: float) -> dict:
+        """Material-only fallback in centipawns."""
         white_win = 1.0 / (1.0 + math.exp(-material_balance / 400.0))
-        # Distribute remainder between draw and black_win
         remainder = 1.0 - white_win
         draw = remainder * 0.4
         black_win = remainder * 0.6
         return {
             "white_win": white_win,
-            "draw": draw,
             "black_win": black_win,
+            "draw": draw,
         }

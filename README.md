@@ -45,7 +45,7 @@ chess-analysis-platform/
 │   ├── models.py              # User, Game, PlayerProfile ORM models
 │   └── schemas.py             # Pydantic v2 schemas
 │
-├── ml_model/                  # ML models (scikit-learn)
+├── ml_model/                  # ML models (LSTM + tree-based classifiers)
 │   ├── win_probability/       # Win probability predictor
 │   ├── blunder_detector/      # Move quality classifier
 │   ├── player_behaviour/      # Player style classifier
@@ -171,12 +171,13 @@ When the backend is running, interactive API docs are at:
 
 ## 🤖 ML Models
 
-Three scikit-learn models are included as pre-trained stubs. They return realistic predictions immediately and can be retrained on real Lichess data.
+Three ML models are included. The win-probability model is a fine-tuned LSTM, while the other two remain tree-based classifiers.
 
 ### Model 1: Win Probability Predictor
-- **Architecture:** MLPClassifier (neural network)
-- **Input:** 16 board features (material, mobility, king safety, …)
+- **Architecture:** Fine-tuned LSTM (Embedding 64, LSTM 128 + numeric fusion)
+- **Input:** Move sequence (max 100) + numeric features (`white_elo`, `black_elo`, `material`)
 - **Output:** `{white_win, draw, black_win}` probabilities
+- **Performance:** 90.43% test accuracy (171,332 games)
 
 ### Model 2: Blunder Detector
 - **Architecture:** RandomForestClassifier
