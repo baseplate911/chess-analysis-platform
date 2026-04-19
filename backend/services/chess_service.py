@@ -72,7 +72,7 @@ class ChessService:
             from stockfish import Stockfish
             print(f"[DEBUG] Attempting to load Stockfish from: {self.stockfish_path}")
             self.engine = Stockfish(path=self.stockfish_path, depth=12)
-            print(f"[DEBUG] ✓ Stockfish loaded successfully!")
+            print(f"[DEBUG] ✓ Stockfish loaded successfully with depth=12!")
         except Exception as e:
             print(f"[DEBUG] ✗ Failed to load Stockfish: {type(e).__name__}: {e}")
             self.engine = None

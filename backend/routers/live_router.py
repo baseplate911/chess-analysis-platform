@@ -52,9 +52,11 @@ def _parse_moves(moves_str: str, moves_analysis: list) -> list:
         try:
             move = chess.Move.from_uci(uci)
         except ValueError:
+            print(f"⚠️ Invalid UCI move: {uci}")
             continue
 
         if move not in board.legal_moves:
+            print(f"⚠️ Illegal move: {uci}")
             continue
 
         move_san = board.san(move)
@@ -95,11 +97,16 @@ async def live_game_ws(websocket: WebSocket, username: str):
     await websocket.accept()
 
     try:
+        print(f"🔵 Fetching current game for user: {username}")
         game_data = await _lichess_service.get_current_game(username)
-    except Exception:
+    except Exception as e:
+        print(f"🔴 Error fetching game: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         game_data = None
 
     if not game_data:
+        print(f"🔴 No ongoing game found for {username}")
         await websocket.send_json({
             "type": "error",
             "message": (
@@ -126,6 +133,10 @@ async def live_game_ws(websocket: WebSocket, username: str):
         else game_data.get("speed", "unknown")
     )
 
+    print(f"✅ Found game: {game_id}")
+    print(f"✅ Players: {white_player} vs {black_player}")
+    print(f"✅ Time control: {time_control}")
+
     await websocket.send_json({
         "type": "connected",
         "game_id": game_id,
@@ -137,58 +148,102 @@ async def live_game_ws(websocket: WebSocket, username: str):
     moves_analysis: list = []
 
     try:
+        print(f"🔵 Starting to stream moves for game {game_id}")
         async for event in _lichess_service.stream_game_moves(game_id):
+            print(f"📨 Received event from Lichess")
             event_type = event.get("type")
+            print(f"📨 Event type: {event_type}")
 
             # gameFull is emitted once at the start; analyse its current state
             if event_type == "gameFull":
                 state = event.get("state", {})
                 moves_str = state.get("moves", "")
                 status = state.get("status", "started")
+                print(f"🎮 gameFull event received")
+                print(f"🎮 Moves: {moves_str[:100] if moves_str else 'No moves yet'}")
+                print(f"🎮 Status: {status}")
             elif event_type == "gameState":
                 moves_str = event.get("moves", "")
                 status = event.get("status", "started")
+                print(f"♟️ gameState event received")
+                print(f"♟️ Moves: {moves_str[:100] if moves_str else 'No moves yet'}")
+                print(f"♟️ Status: {status}")
             else:
+                print(f"⚠️ Unknown event type: {event_type}, skipping")
                 continue
 
-            # Rebuild full analysis for all moves so far
-            moves_analysis = _parse_moves(moves_str, moves_analysis)
+            try:
+                # Rebuild full analysis for all moves so far
+                print(f"🔵 Parsing moves...")
+                moves_analysis = _parse_moves(moves_str, moves_analysis)
+                print(f"✅ Successfully parsed {len(moves_analysis)} moves")
+            except Exception as parse_error:
+                print(f"🔴 ERROR in _parse_moves: {type(parse_error).__name__}: {str(parse_error)}")
+                import traceback
+                traceback.print_exc()
+                await websocket.send_json({
+                    "type": "error",
+                    "message": f"Error parsing moves: {str(parse_error)}",
+                })
+                break
 
             if moves_analysis:
                 last = moves_analysis[-1]
-                await websocket.send_json({
-                    "type": "move",
-                    "move_number": last["move_number"],
-                    "move": last["move"],
-                    "fen": last["fen"],
-                    "classification": last["classification"],
-                    "eval": last["eval"],
-                    "white_win": last["white_win"],
-                    "draw": last["draw"],
-                    "black_win": last["black_win"],
-                })
+                try:
+                    print(f"🔵 Sending move update: {last['move']}")
+                    await websocket.send_json({
+                        "type": "move",
+                        "move_number": last["move_number"],
+                        "move": last["move"],
+                        "fen": last["fen"],
+                        "classification": last["classification"],
+                        "eval": last["eval"],
+                        "white_win": last["white_win"],
+                        "draw": last["draw"],
+                        "black_win": last["black_win"],
+                    })
+                    print(f"✅ Successfully sent move {last['move_number']}: {last['move']}")
+                except Exception as send_error:
+                    print(f"🔴 ERROR sending move: {type(send_error).__name__}: {str(send_error)}")
+                    import traceback
+                    traceback.print_exc()
+                    break
 
             if status in _GAME_OVER_STATUSES:
+                print(f"🏁 Game over! Status: {status}")
                 winner = event.get("winner") or (
                     state.get("winner") if event_type == "gameFull" else None
                 )
                 summary = _compute_summary(moves_analysis)
-                await websocket.send_json({
-                    "type": "game_over",
-                    "status": status,
-                    "winner": winner,
-                    "moves": moves_analysis,
-                    "summary": summary,
-                })
+                try:
+                    print(f"🔵 Sending game_over message")
+                    await websocket.send_json({
+                        "type": "game_over",
+                        "status": status,
+                        "winner": winner,
+                        "moves": moves_analysis,
+                        "summary": summary,
+                    })
+                    print(f"✅ Successfully sent game_over message")
+                except Exception as send_error:
+                    print(f"🔴 ERROR sending game_over: {type(send_error).__name__}: {str(send_error)}")
+                    import traceback
+                    traceback.print_exc()
                 break
 
     except WebSocketDisconnect:
+        print(f"ℹ️ WebSocket disconnected by client")
         pass
-    except Exception:
+    except Exception as e:
+        print(f"🔴 BACKEND STREAMING ERROR: {type(e).__name__}")
+        print(f"🔴 ERROR MESSAGE: {str(e)}")
+        import traceback
+        print(f"🔴 FULL TRACEBACK:")
+        traceback.print_exc()
         try:
             await websocket.send_json({
                 "type": "error",
-                "message": "An unexpected error occurred while streaming the game.",
+                "message": f"Streaming error: {str(e)}",
             })
-        except Exception:
-            pass
+        except Exception as final_error:
+            print(f"🔴 Could not send error to client: {str(final_error)}")

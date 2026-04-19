@@ -20,7 +20,7 @@ export default function LiveGamePage() {
   const navigate = useNavigate();
 
   const [username, setUsername] = useState('');
-  const [status, setStatus] = useState('idle'); // idle | connecting | connected | game_over | error
+  const [status, setStatus] = useState('idle');
   const [gameInfo, setGameInfo] = useState(null);
   const [currentFen, setCurrentFen] = useState(STARTING_FEN);
   const [moves, setMoves] = useState([]);
@@ -31,6 +31,7 @@ export default function LiveGamePage() {
   const [error, setError] = useState('');
 
   const wsRef = useRef(null);
+  const connectTimeoutRef = useRef(null);
 
   const handleConnect = useCallback(() => {
     if (!username.trim()) return;
@@ -45,21 +46,53 @@ export default function LiveGamePage() {
     setSummary(null);
     setGameInfo(null);
 
+    // FIX: Use backend port 8000, not frontend port 5173
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/api/live/ws/${username.trim()}`;
+    const backendHost = window.location.hostname === 'localhost' 
+      ? 'localhost:8000' 
+      : window.location.host;
+    const wsUrl = `${wsProtocol}//${backendHost}/api/live/ws/${username.trim()}`;
+
+    console.log('🔗 Connecting to:', wsUrl);
+    console.log('🔗 Backend Host:', backendHost);
+    console.log('🔗 Username:', username.trim());
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
+    connectTimeoutRef.current = setTimeout(() => {
+      if (status === 'connecting') {
+        console.log('⏱️ Connection timeout!');
+        ws.close();
+        setStatus('error');
+        setError('Connection timeout. Is backend running on port 8000?');
+      }
+    }, 10000);
+
+    ws.onopen = () => {
+      console.log('✅ WebSocket opened successfully');
+      if (connectTimeoutRef.current) {
+        clearTimeout(connectTimeoutRef.current);
+      }
+    };
+
     ws.onmessage = (event) => {
+      console.log('📨 FULL MESSAGE RECEIVED:', event.data);
+
       let data;
       try {
         data = JSON.parse(event.data);
-      } catch {
+      } catch (e) {
+        console.error('❌ JSON parse error:', e);
+        console.error('❌ Raw event data:', event.data);
         return;
       }
 
+      console.log('📨 Parsed data type:', data.type);
+      console.log('📨 Full parsed data:', data);
+
       if (data.type === 'connected') {
+        console.log('🎮 Connected to game:', data.game_id);
         setStatus('connected');
         setGameInfo({
           white: data.white,
@@ -70,6 +103,7 @@ export default function LiveGamePage() {
       }
 
       if (data.type === 'move') {
+        console.log('♟️ Move:', data.move);
         setCurrentFen(data.fen);
         setCurrentEval(data.eval ?? 0);
         setLastMove({
@@ -98,6 +132,7 @@ export default function LiveGamePage() {
       }
 
       if (data.type === 'game_over') {
+        console.log('🏁 Game over');
         setStatus('game_over');
         setSummary(data.summary);
         if (data.moves && data.moves.length) {
@@ -113,28 +148,44 @@ export default function LiveGamePage() {
       }
 
       if (data.type === 'error') {
+        console.error('🔴 Error from backend:', data.message);
         setStatus('error');
         setError(data.message || 'An error occurred.');
         ws.close();
       }
     };
 
-    ws.onerror = () => {
+    ws.onerror = (event) => {
+      console.error('🔴 WebSocket error event:', event);
+      console.error('🔴 WebSocket readyState:', ws.readyState);
+      if (connectTimeoutRef.current) {
+        clearTimeout(connectTimeoutRef.current);
+      }
       setStatus('error');
-      setError('WebSocket connection failed. Is the backend running?');
+      setError('WebSocket error. Backend may not be running on port 8000.');
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+      console.log('🔌 WebSocket closed');
+      console.log('🔌 Close code:', event.code);
+      console.log('🔌 Close reason:', event.reason);
+      console.log('🔌 Clean close:', event.wasClean);
+      if (connectTimeoutRef.current) {
+        clearTimeout(connectTimeoutRef.current);
+      }
       if (wsRef.current === ws) {
         wsRef.current = null;
       }
     };
-  }, [username]);
+  }, [username, status]);
 
   const handleStop = useCallback(() => {
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
+    }
+    if (connectTimeoutRef.current) {
+      clearTimeout(connectTimeoutRef.current);
     }
     setStatus('idle');
     setMoves([]);
@@ -152,7 +203,6 @@ export default function LiveGamePage() {
   return (
     <div className="min-h-screen bg-gray-900 py-8 px-4">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-2">
@@ -171,7 +221,6 @@ export default function LiveGamePage() {
           </button>
         </div>
 
-        {/* Idle — username input */}
         {status === 'idle' && (
           <div className="max-w-lg mx-auto bg-gray-800 rounded-xl border border-gray-700 p-8 text-center">
             <div className="text-4xl mb-4">🔴</div>
@@ -196,7 +245,7 @@ export default function LiveGamePage() {
                 onChange={(e) => setUsername(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
                 placeholder="e.g. MagnusCarlsen"
-                className="flex-1 bg-gray-700 border border-gray-600 text-white rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent placeholder-gray-500"
+                className="flex-1 bg-gray-700 border border-gray-600 text-white rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
               />
               <button
                 onClick={handleConnect}
@@ -208,37 +257,46 @@ export default function LiveGamePage() {
             </div>
 
             <p className="mt-4 text-xs text-gray-500">
-              💡 Make sure you have an ongoing game on Lichess before clicking Watch Live.
+              Make sure you have an ongoing game on Lichess before clicking Watch Live.
             </p>
           </div>
         )}
 
-        {/* Connecting spinner */}
         {status === 'connecting' && (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <div className="w-10 h-10 border-4 border-red-500 border-t-transparent rounded-full animate-spin" />
             <p className="text-gray-400">Connecting to Lichess...</p>
+            <p className="text-gray-500 text-xs">Connecting to backend at localhost:8000</p>
+            <p className="text-gray-500 text-xs">Check F12 console for detailed logs</p>
           </div>
         )}
 
-        {/* Error state */}
         {status === 'error' && (
           <div className="max-w-lg mx-auto bg-gray-800 rounded-xl border border-red-700/40 p-8 text-center">
             <div className="text-4xl mb-4">❌</div>
             <p className="text-red-400 mb-4">{error}</p>
+            <details className="text-left bg-gray-900 p-3 rounded text-xs text-gray-400 mb-4">
+              <summary className="cursor-pointer font-semibold">Troubleshooting steps</summary>
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>Backend running: python backend/main.py</li>
+                <li>Port 8000 open: curl http://localhost:8000/health</li>
+                <li>Check F12 console for connection logs</li>
+                <li>Lichess has ongoing game (start one first)</li>
+                <li>Username correct and case-sensitive</li>
+                <li>Backend logs should show WebSocket connection</li>
+              </ul>
+            </details>
             <button
               onClick={() => { setStatus('idle'); setError(''); }}
               className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm transition-colors"
             >
-              ← Try Again
+              Try Again
             </button>
           </div>
         )}
 
-        {/* Connected / Game Over */}
         {(status === 'connected' || status === 'game_over') && gameInfo && (
           <>
-            {/* Status bar */}
             <div className="flex items-center justify-between bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 mb-4">
               <div className="flex items-center gap-3">
                 {status === 'connected' ? (
@@ -248,7 +306,7 @@ export default function LiveGamePage() {
                   </span>
                 ) : (
                   <span className="flex items-center gap-1.5 text-gray-400 text-sm font-semibold">
-                    🏁 GAME OVER
+                    GAME OVER
                   </span>
                 )}
                 <span className="text-white text-sm">
@@ -265,12 +323,11 @@ export default function LiveGamePage() {
                 onClick={handleStop}
                 className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs transition-colors"
               >
-                ⏹ Stop Watching
+                Stop Watching
               </button>
             </div>
 
             <div className="flex flex-col lg:flex-row gap-6">
-              {/* Left: Board */}
               <div className="flex flex-col items-center gap-4">
                 <div className="flex items-start gap-3">
                   <div style={{ width: 420 }}>
@@ -284,7 +341,6 @@ export default function LiveGamePage() {
                   <EvaluationBar evaluation={currentEval} />
                 </div>
 
-                {/* Last move info */}
                 {lastMove && (
                   <div className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm flex items-center gap-3">
                     <span className="text-gray-400">Last Move:</span>
@@ -297,13 +353,9 @@ export default function LiveGamePage() {
                 )}
               </div>
 
-              {/* Right: Charts + Moves */}
               <div className="flex-1 flex flex-col gap-4">
-                {/* Win Probability bars */}
                 <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-                  <h3 className="text-sm font-semibold text-white mb-3">
-                    📈 Win Probability (LIVE)
-                  </h3>
+                  <h3 className="text-sm font-semibold text-white mb-3">Win Probability (LIVE)</h3>
                   {winProbabilities.length > 0 ? (
                     (() => {
                       const latest = winProbabilities[winProbabilities.length - 1];
@@ -333,17 +385,15 @@ export default function LiveGamePage() {
                   )}
                 </div>
 
-                {/* Win Probability Chart (history) */}
                 {winProbabilities.length > 1 && (
                   <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-                    <h3 className="text-sm font-semibold text-white mb-3">📊 Probability History</h3>
+                    <h3 className="text-sm font-semibold text-white mb-3">Probability History</h3>
                     <WinProbabilityChart winProbabilities={winProbabilities} />
                   </div>
                 )}
 
-                {/* Move List */}
                 <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-                  <h3 className="text-sm font-semibold text-white mb-3">📋 Moves So Far</h3>
+                  <h3 className="text-sm font-semibold text-white mb-3">Moves</h3>
                   <MoveList
                     moves={moves}
                     currentMoveIndex={moves.length - 1}
@@ -351,7 +401,6 @@ export default function LiveGamePage() {
                   />
                 </div>
 
-                {/* Game Over Summary */}
                 {status === 'game_over' && summary && (
                   <GameSummaryCard summary={summary} result={null} />
                 )}
