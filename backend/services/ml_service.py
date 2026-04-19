@@ -3,28 +3,28 @@
 import math
 import os
 from typing import Dict, List
+import pickle
 
 try:
     import joblib
     import numpy as np
+    from tensorflow.keras.models import load_model
     _NUMPY_AVAILABLE = True
+    _LSTM_AVAILABLE = True
 except ImportError:
     _NUMPY_AVAILABLE = False
+    _LSTM_AVAILABLE = False
 
 
 class MLService:
-    """Loads trained models (if present) and provides prediction capabilities.
+    """Loads LSTM model + supporting files for predictions."""
 
-    When model files are absent the service falls back to deterministic heuristics
-    so that the application remains fully functional without pre-trained artefacts.
-    """
-
-    MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
+    MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "ml_model", "win_probability")
 
     def __init__(self):
-        self.win_prob_model = None
-        self.move_quality_model = None
-        self.player_style_model = None
+        self.lstm_model = None
+        self.scaler = None
+        self.move_to_idx = None
         self.load_models()
 
     # ------------------------------------------------------------------
@@ -32,76 +32,80 @@ class MLService:
     # ------------------------------------------------------------------
 
     def load_models(self) -> None:
-        """Try to load serialised sklearn models from the models/ directory.
+        """Load LSTM model and supporting files."""
+        if _LSTM_AVAILABLE:
+            self._load_lstm()
+        self._load_supporting_files()
 
-        Falls back to stub implementations when files are not found.
-        """
-        if not _NUMPY_AVAILABLE:
+    def _load_lstm(self) -> None:
+        """Load LSTM model from .keras file."""
+        model_path = os.path.join(self.MODEL_DIR, "final_lstm_model.keras")
+        
+        if not os.path.exists(model_path):
+            print(f"[LSTM] Model not found: {model_path}")
             return
+        
+        try:
+            self.lstm_model = load_model(model_path)
+            print(f"[LSTM] Model loaded! (90.43% accuracy)")
+        except Exception as e:
+            print(f"[LSTM] Failed to load: {e}")
 
-        for attr, filename in [
-            ("win_prob_model", "win_prob_model.pkl"),
-            ("move_quality_model", "move_quality_model.pkl"),
-            ("player_style_model", "player_style_model.pkl"),
-        ]:
-            path = os.path.join(self.MODEL_DIR, filename)
-            if os.path.exists(path):
-                try:
-                    setattr(self, attr, joblib.load(path))
-                except Exception:
-                    pass  # Keep attribute as None; will use heuristic fallback
+    def _load_supporting_files(self) -> None:
+        """Load scaler and move mapping."""
+        # Scaler
+        scaler_path = os.path.join(self.MODEL_DIR, "scaler.pkl")
+        if os.path.exists(scaler_path):
+            try:
+                with open(scaler_path, 'rb') as f:
+                    self.scaler = pickle.load(f)
+                print(f"[LSTM] Scaler loaded!")
+            except Exception as e:
+                print(f"[LSTM] Scaler error: {e}")
+        
+        # Move mapping
+        move_path = os.path.join(self.MODEL_DIR, "move_to_idx.pkl")
+        if os.path.exists(move_path):
+            try:
+                with open(move_path, 'rb') as f:
+                    self.move_to_idx = pickle.load(f)
+                print(f"[LSTM] Move mapping loaded! ({len(self.move_to_idx)} moves)")
+            except Exception as e:
+                print(f"[LSTM] Move mapping error: {e}")
 
     # ------------------------------------------------------------------
     # Public prediction API
     # ------------------------------------------------------------------
 
     def predict_win_probability(self, features: List[float]) -> List[float]:
-        """Predict [white_win, draw, black_win] probabilities for a given feature vector.
-
-        Uses a trained model when available, otherwise applies a sigmoid heuristic
-        based on the material-balance feature (index 0).
+        """Predict [white_win, draw, black_win] probabilities.
+        
+        Uses LSTM model when available, otherwise falls back to sigmoid heuristic.
         """
-        if self.win_prob_model is not None and _NUMPY_AVAILABLE:
+        if self.lstm_model is not None and self.scaler is not None and _NUMPY_AVAILABLE:
             try:
-                x = np.array(features).reshape(1, -1)
-                proba = self.win_prob_model.predict_proba(x)[0].tolist()
-                # Ensure exactly three classes
-                if len(proba) == 3:
-                    return proba
-            except Exception:
-                pass
-
+                # Prepare inputs for LSTM
+                X_moves = np.zeros((1, 100), dtype='int32')  # Empty move sequence
+                X_numeric = np.array([[1600, 1600, features[0] if features else 0]], dtype='float32')
+                X_numeric_scaled = self.scaler.transform(X_numeric)
+                
+                # LSTM prediction
+                prediction = self.lstm_model.predict([X_moves, X_numeric_scaled], verbose=0)
+                proba = prediction[0].tolist()
+                
+                return [proba[0], proba[2], proba[1]]
+            except Exception as e:
+                print(f"[LSTM] Prediction error: {e}")
+        
+        # Fallback
         return self._sigmoid_win_probability(features[0] if features else 0.0)
 
     def classify_move_quality(self, features: List[float], eval_diff: float) -> str:
-        """Classify a move as blunder/mistake/inaccuracy/good/best.
-
-        Uses a trained model when available, otherwise applies the eval_diff thresholds.
-        eval_diff should be positive when the position worsened (eval_before - eval_after).
-        """
-        if self.move_quality_model is not None and _NUMPY_AVAILABLE:
-            try:
-                x = np.array(features + [eval_diff]).reshape(1, -1)
-                return str(self.move_quality_model.predict(x)[0])
-            except Exception:
-                pass
-
+        """Classify a move as blunder/mistake/inaccuracy/good/best."""
         return self._threshold_move_quality(eval_diff)
 
     def classify_player_style(self, player_stats: Dict) -> str:
-        """Classify a player's style (aggressive/positional/defensive/balanced).
-
-        Uses a trained model when available, otherwise derives style from accuracy.
-        """
-        if self.player_style_model is not None and _NUMPY_AVAILABLE:
-            try:
-                accuracy = float(player_stats.get("accuracy", 0.0))
-                total_games = float(player_stats.get("total_games", 0))
-                x = np.array([[accuracy, total_games]])
-                return str(self.player_style_model.predict(x)[0])
-            except Exception:
-                pass
-
+        """Classify a player's style from accuracy."""
         return self._heuristic_player_style(player_stats)
 
     # ------------------------------------------------------------------
@@ -110,27 +114,17 @@ class MLService:
 
     @staticmethod
     def _sigmoid_win_probability(cp_eval: float) -> List[float]:
-        """Convert a centipawn (pawns) evaluation to win/draw/loss probabilities.
-
-        Formula:
-            white_prob = sigmoid(cp_eval / 4)   (scaled so ±1 pawn ≈ 56 % / 44 %)
-            draw_prob  = 0.3 * (1 - |white_prob - 0.5| * 2)
-            black_prob = 1 - white_prob - draw_prob
-        """
+        """Convert centipawn evaluation to win/draw/loss probabilities."""
         white_prob = 1.0 / (1.0 + math.exp(-cp_eval / 4.0))
         draw_prob = 0.3 * (1.0 - abs(white_prob - 0.5) * 2.0)
         draw_prob = max(0.0, draw_prob)
         black_prob = max(0.0, 1.0 - white_prob - draw_prob)
-        # Re-normalise to ensure they sum to 1
         total = white_prob + draw_prob + black_prob
         return [white_prob / total, draw_prob / total, black_prob / total]
 
     @staticmethod
     def _threshold_move_quality(eval_diff: float) -> str:
-        """Classify move quality from evaluation delta.
-
-        eval_diff is positive when the position worsened (eval_before - eval_after).
-        """
+        """Classify move quality from evaluation delta."""
         if eval_diff > 2.0:
             return "blunder"
         if eval_diff > 1.0:
@@ -143,7 +137,7 @@ class MLService:
 
     @staticmethod
     def _heuristic_player_style(player_stats: Dict) -> str:
-        """Derive a rough playing style from accuracy statistics."""
+        """Derive playing style from accuracy statistics."""
         accuracy = float(player_stats.get("accuracy", 0.0))
         if accuracy >= 90:
             return "positional"
